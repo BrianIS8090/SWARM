@@ -2,6 +2,11 @@
 
 SWARM — локальная система для координации нескольких LLM-агентов (Claude, Codex, Gemini, OpenCode, Qwen), работающих параллельно над общей кодовой базой.
 
+<img width="2529" height="1323" alt="Снимок экрана 2026-02-06 134233" src="https://github.com/user-attachments/assets/0d05ba34-7886-459f-844b-d2132f9f832c" />
+
+<img width="2330" height="1343" alt="Снимок экрана 2026-02-06 134238" src="https://github.com/user-attachments/assets/4780894c-ae0e-4302-9efa-831ff8f1802d" />
+
+
 ## Возможности
 
 - **Единый CLI-интерфейс** (`swarm`) для управления агентами и задачами
