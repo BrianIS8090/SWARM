@@ -1,16 +1,5 @@
 
-Файл 1: README.md (Основной, английский)
-Создай файл README.md и вставь туда этот код:
-<div align="center">
-  <a href="README_RU.md">
-    <img src="https://img.shields.io/badge/Lang-Russian-blue.svg" alt="Russian">
-  </a>
-  <a href="README.md">
-    <img src="https://img.shields.io/badge/Lang-English-red.svg" alt="English">
-  </a>
-</div>
 
----
 
 # SWARM — Multi-Agent Orchestration System
 
