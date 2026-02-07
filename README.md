@@ -20,9 +20,9 @@ SWARM is a local system for coordinating multiple LLM agents (Claude, Codex, Gem
 
 ### 1. Installation
 
-```bash
+
 # From the SWARM directory
-pip install -e .'''
+pip install -e .
 
 2. Project Initialization
 
