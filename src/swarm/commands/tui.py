@@ -4,15 +4,15 @@ TUI-монитор SWARM на базе Textual.
 Полноценный интерфейс со скроллингом и обновлением в реальном времени.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import VerticalScroll
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Static
 from textual.timer import Timer
+from textual.widgets import DataTable, Footer, Header, Static
 
-from ..db import find_db_path, get_all_agents, get_all_tasks, get_all_locks, get_recent_events
+from ..db import find_db_path, get_all_agents, get_all_locks, get_all_tasks, get_recent_events, is_process_alive
 from ..models import AgentStatus, TaskStatus
 
 
@@ -33,9 +33,10 @@ class AgentsPanel(Static):
         table.clear()
 
         agents = get_all_agents()
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         for agent in agents:
+            pid_alive = is_process_alive(agent.pid) if agent.pid is not None else None
             # Время с последнего heartbeat
             if agent.last_heartbeat:
                 delta = now - agent.last_heartbeat
@@ -46,6 +47,9 @@ class AgentsPanel(Static):
                     hb_str = f"{secs // 60}м"
                 else:
                     hb_str = f"{secs // 3600}ч"
+
+                if secs > 300 and pid_alive is True:
+                    hb_str = f"{hb_str}*"
             else:
                 hb_str = "-"
 
@@ -148,7 +152,7 @@ class LocksPanel(Static):
 
         locks = get_all_locks()
         agents = {a.agent_id: a for a in get_all_agents()}
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         for lock in locks:
             # Имя агента

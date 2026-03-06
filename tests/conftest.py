@@ -4,7 +4,6 @@
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -12,7 +11,7 @@ import pytest
 # Добавляем src в путь
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from swarm.db import init_database, DB_FILENAME
+from swarm.db import init_database
 
 
 @pytest.fixture
@@ -22,7 +21,7 @@ def temp_db(tmp_path):
     
     Возвращает путь к директории с БД.
     """
-    db_path = init_database(tmp_path)
+    init_database(tmp_path)
     
     # Сохраняем текущую директорию
     original_cwd = os.getcwd()

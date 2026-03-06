@@ -12,14 +12,12 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from ..db import DB_FILENAME, init_database
+from ..utils import CLI_TYPES, get_version
 
 console = Console()
-
-
-# Типы CLI-агентов и их папки
-CLI_TYPES = ["claude", "codex", "gemini", "opencode", "qwen"]
 
 
 def get_orchestrator_skill_template() -> str:
@@ -32,6 +30,77 @@ description: Роль оркестратора в системе SWARM. Испо
 # SWARM — Оркестратор
 
 Ты — оркестратор системы SWARM. Ты НЕ регистрируешься как агент. Ты управляешь задачами, распределяешь работу и контролируешь качество.
+
+## Загрузка контекста при старте
+
+**ОБЯЗАТЕЛЬНО** в начале каждой сессии работы (или когда пользователь просит спланировать/проверить):
+
+1. Прочитай все задачи включая завершённые — это даёт полный контекст того, что уже было сделано:
+```bash
+swarm task list --all
+```
+
+2. Прочитай список агентов — кто зарегистрирован и в каком состоянии:
+```bash
+swarm agents
+```
+
+**Только после загрузки контекста** переходи к планированию или оценке.
+
+Это критически важно: без контекста ты можешь создать дублирующие задачи, пропустить уже выполненную работу или назначить задачу несуществующему агенту.
+
+## Работа с логами
+
+Логи используются **по требованию** — не нужно считывать их в начале каждой сессии. Используй логи когда:
+- Пользователь спрашивает, что происходило в определённый момент
+- Нужно понять причину ошибки или зависания
+- Нужно увидеть хронологию событий по конкретной задаче или агенту
+
+### Параметры команды `swarm logs`
+
+```bash
+# Последние 50 событий (по умолчанию)
+swarm logs
+
+# Указать количество записей — важно для больших проектов!
+swarm logs -n 20          # последние 20 событий
+swarm logs -n 200         # последние 200 событий
+
+# Фильтр по времени — показать события за последние N часов
+swarm logs --since 1      # за последний час
+swarm logs --since 0.5    # за последние 30 минут
+swarm logs --since 24     # за последние сутки
+
+# Фильтры по задаче / агенту
+swarm logs --task 5       # события по задаче #5
+swarm logs --agent dev-1  # события агента dev-1
+
+# Комбинация фильтров
+swarm logs -n 100 --since 2 --agent dev-1
+```
+
+### Типы событий в логах
+
+| Событие | Значение |
+|---------|----------|
+| `task_created` | Создана новая задача |
+| `task_assigned` | Задача назначена агенту |
+| `task_started` | Агент начал выполнение задачи |
+| `task_done` | Задача завершена агентом |
+| `task_force_closed` | Задача принудительно закрыта оркестратором/лидером |
+| `file_locked` | Агент заблокировал файл |
+| `file_unlocked` | Файл разблокирован |
+| `waiting_for_lock` | Агент ожидает освобождения файла |
+| `error` | Ошибка (таймаут блокировки и пр.) |
+| `agent_registered` | Агент зарегистрирован в системе |
+| `agent_started` | Лидер дал команду начать работу |
+| `agent_cleanup` | Мёртвый агент удалён из системы |
+
+### Важно по логам
+
+- В больших проектах логов может быть тысячи — **всегда указывай `--limit`** или `--since`
+- Для текущей итерации работы используй `--since` с подходящим количеством часов
+- Для анализа конкретной проблемы — фильтруй по `--task` или `--agent`
 
 ## Профили CLI-агентов
 
@@ -157,7 +226,9 @@ swarm logs
 
 Во время работы агентов:
 - Отвечать на вопросы пользователя о прогрессе
-- Если агент завис (heartbeat > 5 мин) — предложить `swarm agents --cleanup`
+- Если heartbeat устарел, сначала отличать "нет heartbeat" от "процесс мёртв"
+- Если heartbeat старый, но процесс жив или агент просто долго думает/редактирует, не считать это зависанием автоматически
+- Если агент действительно завис или пользователь просит вмешаться — использовать `swarm agents --cleanup` или `swarm task close <ID>`
 - Если задача заблокирована — предложить `swarm task close <ID>` и пересоздать
 - Если нужно срочно добавить задачу — создать с высоким приоритетом
 
@@ -203,11 +274,20 @@ swarm task assign 8 --agent dev-1
 | `swarm task assign ID --agent имя` | Назначить задачу конкретному агенту |
 | `swarm task list` | Активные задачи |
 | `swarm task list --all` | Все задачи включая завершённые |
+| `swarm task list --status pending` | Фильтр по статусу (pending/in_progress/done/blocked/failed) |
 | `swarm task close ID` | Принудительно закрыть задачу |
+| `swarm task close ID --reason "..."` | Закрыть задачу с указанием причины |
 | `swarm agents` | Список агентов |
-| `swarm agents --cleanup` | Удалить мёртвых агентов |
+| `swarm agents --cleanup` | Удалить мёртвых агентов (по heartbeat + PID) |
+| `swarm agents --cleanup --force` | Удалить ВСЕХ агентов |
 | `swarm start --all` | Дать команду на старт |
-| `swarm logs` | Журнал событий |
+| `swarm logs` | Журнал событий (последние 50) |
+| `swarm logs -n N` | Указать количество записей |
+| `swarm logs --since N` | События за последние N часов |
+| `swarm logs --task ID` | Фильтр по задаче |
+| `swarm logs --agent имя` | Фильтр по агенту |
+| `swarm unlock --all --force` | Снять все блокировки (экстренное) |
+| `swarm unlock --force --file путь` | Принудительно снять одну блокировку |
 
 ## Важно
 
@@ -218,6 +298,9 @@ swarm task assign 8 --agent dev-1
 - Всегда сначала рекомендовать состав команды, потом ждать регистрации, потом создавать задачи
 - Назначать задачи с учётом сильных сторон каждого CLI
 - При ревью смотреть на результат глазами пользователя, а не агента
+- Агенты не должны выполнять `swarm task add`, `swarm task assign`, `swarm task close` и не должны менять очередь задач
+- Агент может держать только одну блокировку за раз и должен разблокировать файл сразу после завершения правок
+- Чужую блокировку не снимает другой агент; принудительная разблокировка разрешена только пользователю или оркестратору
 '''
 
 
@@ -251,6 +334,7 @@ swarm join --cli {cli_type} --name <имя-от-пользователя> --role
 ```
 
 **Роли:** `architect`, `developer`, `tester`, `devops`
+**Имя:** только латиница, цифры, дефис, подчёркивание (1-32 символа). Например: `dev-1`, `claude_worker`, `tester3`.
 
 ### После регистрации: ЗАПОМНИ СВОЁ ИМЯ!
 
@@ -263,30 +347,46 @@ swarm join --cli {cli_type} --name <имя-от-пользователя> --role
 ```
 1. swarm next --agent <твоё-имя>              → получить задачу
 2. Проанализировать                            → определить файлы для изменения
-3. swarm lock <файлы> --agent <твоё-имя>      → заблокировать файлы
-4. Выполнить работу                            → написать код
-5. swarm done --summary "..." --agent <твоё-имя> → завершить с резюме
-6. Повторить с шага 1
+3. swarm lock <файл> --agent <твоё-имя>       → заблокировать один файл
+4. Внести правки только в этот файл            → написать код
+5. swarm unlock --file <файл>                  → сразу разблокировать файл
+6. Если нужен другой файл — вернуться к шагу 3
+7. Во время долгого анализа вызывать heartbeat → swarm heartbeat --agent <твоё-имя> --quiet
+8. swarm done --summary "..." --agent <твоё-имя> → завершить с резюме
+9. Повторить с шага 1
 ```
 
 ## Команды
 
 **ВАЖНО:** Всегда добавляй `--agent <твоё-имя>` к командам!
+**ВАЖНО:** Не используй `swarm --help`, `swarm task --help` и другие варианты `--help`. Агенту разрешены только команды, перечисленные в этом скилле.
 
 | Команда | Описание |
 |---------|----------|
 | `swarm join --cli {cli_type} --name X --role Y` | Зарегистрироваться |
 | `swarm next --agent X` | Получить задачу |
-| `swarm lock файлы --agent X` | Заблокировать файлы |
+| `swarm lock файл --agent X` | Заблокировать один файл |
+| `swarm unlock --file файл` | Снять свою блокировку с файла |
+| `swarm heartbeat --agent X --quiet` | Обновить heartbeat без лишнего вывода |
 | `swarm done --summary "..." --agent X` | Завершить задачу |
 | `swarm status --agent X` | Проверить свой статус |
 
 ## Правила блокировки
 
 - **ВСЕГДА** блокируй файлы перед редактированием
-- Указывай **ВСЕ** файлы одной командой
-- Если файл занят — команда ждёт автоматически
-- Блокировки снимаются при `swarm done`
+- Блокировать можно **только один файл за раз**
+- Максимум **одна активная блокировка на агента** в любой момент
+- Блокируй файл **только в момент редактирования**
+- Как только правки в файле закончены — **сразу** выполни `swarm unlock --file <файл>`
+- Если тот же файл нужен снова — заново заблокируй его, внеси правки и снова разблокируй
+- Если файл занят — жди. **Не** снимай чужую блокировку и **не** проси систему сделать это за тебя
+- Свою обычную блокировку снимает только агент-владелец; принудительно снять её может только Лидер или оркестратор
+
+## Heartbeat
+
+- `swarm agents` может показывать старый heartbeat даже у живого агента, если тот долго анализирует код или редактирует локально и не вызывает команды SWARM
+- Во время долгого анализа, ожидания ответа пользователя или длинной правки периодически вызывай `swarm heartbeat --agent <твоё-имя> --quiet`
+- Старый heartbeat сам по себе **не означает**, что другой агент завис
 
 ## Формат резюме
 
@@ -301,6 +401,9 @@ swarm done --summary "Добавлен UserController с CRUD, файлы: user.
 - Нет задач → остановись и жди
 - Не спрашивай "что дальше?" — просто жди
 - Не редактируй файлы без блокировки
+- Не используй `swarm unlock --force`
+- Не используй `swarm task add`, `swarm task assign`, `swarm task close`
+- Не переназначай задачи, не меняй очередь и не выполняй функции оркестратора
 - Не модифицируй swarm.db напрямую
 '''
 
@@ -353,18 +456,19 @@ def init_command(
             skill_file.write_text(get_skill_template(cli_type), encoding="utf-8")
             skills_created.append(cli_type)
 
-    # Создаём скилл оркестратора для Claude
-    orchestrator_dir = current_dir / ".claude" / "skills" / "swarm-orchestrator"
-    orchestrator_file = orchestrator_dir / "SKILL.md"
-    orchestrator_created = False
-    if not orchestrator_file.exists() or force:
-        orchestrator_dir.mkdir(parents=True, exist_ok=True)
-        orchestrator_file.write_text(get_orchestrator_skill_template(), encoding="utf-8")
-        orchestrator_created = True
+    # Создаём скилл оркестратора для всех CLI
+    orchestrator_created = []
+    for cli_type in CLI_TYPES:
+        orchestrator_dir = current_dir / f".{cli_type}" / "skills" / "swarm-orchestrator"
+        orchestrator_file = orchestrator_dir / "SKILL.md"
+        if not orchestrator_file.exists() or force:
+            orchestrator_dir.mkdir(parents=True, exist_ok=True)
+            orchestrator_file.write_text(get_orchestrator_skill_template(), encoding="utf-8")
+            orchestrator_created.append(cli_type)
 
     # Выводим результат
     console.print()
-    
+
     skills_info = ""
     if skills_created:
         skills_info = "\n\nСозданы SKILL.md для агентов:\n"
@@ -372,18 +476,82 @@ def init_command(
             skills_info += f"  • [cyan].{cli_type}/skills/swarm-agent/SKILL.md[/cyan]\n"
     if orchestrator_created:
         skills_info += "\nСоздан SKILL.md оркестратора:\n"
-        skills_info += "  • [cyan].claude/skills/swarm-orchestrator/SKILL.md[/cyan]\n"
+        for cli_type in orchestrator_created:
+            skills_info += f"  • [cyan].{cli_type}/skills/swarm-orchestrator/SKILL.md[/cyan]\n"
     
     console.print(Panel.fit(
-        "[green]✓ SWARM инициализирован успешно![/green]\n\n"
+        f"[green]✓ SWARM v{get_version()} инициализирован успешно![/green]\n\n"
         f"База данных: [cyan]{db_path}[/cyan]"
         + skills_info,
-        title="SWARM Init",
+        title=f"SWARM Init v{get_version()}",
         border_style="green",
     ))
+    # Справка по командам для пользователя
     console.print()
-    console.print("Следующие шаги:")
-    console.print("  1. Создайте задачи: [cyan]swarm task add --desc \"...\" --priority 1[/cyan]")
-    console.print("  2. Запустите терминалы агентов и выполните [cyan]swarm join[/cyan]")
-    console.print("  3. Откройте монитор: [cyan]swarm tui[/cyan]")
+    console.print("[bold]Порядок работы:[/bold]")
+    console.print("  1. Создайте задачи для агентов")
+    console.print("  2. Запустите агентов в отдельных терминалах (swarm join)")
+    console.print("  3. Дайте команду на старт (swarm start --all)")
+    console.print("  4. Следите за прогрессом через монитор или логи")
+    console.print("  5. Проверьте результаты и при необходимости создайте новые задачи")
+    console.print()
+
+    cmd_table = Table(
+        title="Команды SWARM (для Лидера / Оркестратора)",
+        show_header=True,
+        title_style="bold",
+        border_style="dim",
+        pad_edge=False,
+    )
+    cmd_table.add_column("Команда", style="cyan", no_wrap=True)
+    cmd_table.add_column("Описание")
+
+    cmd_table.add_row("swarm task add --desc \"...\" --priority N", "Создать задачу (приоритет 1-5)")
+    cmd_table.add_row("  --cli / --role / --name", "  Назначить задачу по типу CLI, роли или имени агента")
+    cmd_table.add_row("  --depends-on ID", "  Указать зависимость от другой задачи")
+    cmd_table.add_row("swarm task assign ID --agent имя", "Назначить задачу конкретному агенту")
+    cmd_table.add_row("swarm task list", "Показать активные задачи (pending/in_progress)")
+    cmd_table.add_row("swarm task list --all", "Показать все задачи включая завершённые")
+    cmd_table.add_row("swarm task close ID", "Принудительно закрыть задачу")
+    cmd_table.add_row("", "")
+    cmd_table.add_row("swarm agents", "Список зарегистрированных агентов")
+    cmd_table.add_row("swarm agents --cleanup", "Удалить неактивных агентов (мёртвый PID)")
+    cmd_table.add_row("swarm agents --cleanup --force", "Удалить ВСЕХ агентов")
+    cmd_table.add_row("", "")
+    cmd_table.add_row("swarm start --all", "Дать всем агентам команду начать работу")
+    cmd_table.add_row("swarm start --agent имя", "Дать команду конкретному агенту")
+    cmd_table.add_row("", "")
+    cmd_table.add_row("swarm logs", "Журнал событий (последние 50)")
+    cmd_table.add_row("swarm logs -n N", "Указать количество записей")
+    cmd_table.add_row("swarm logs --since N", "События за последние N часов")
+    cmd_table.add_row("swarm logs --task ID / --agent имя", "Фильтр по задаче или агенту")
+    cmd_table.add_row("", "")
+    cmd_table.add_row("swarm unlock --file путь --force", "Принудительно снять блокировку файла")
+    cmd_table.add_row("swarm unlock --all --force", "Снять все блокировки (экстренное)")
+    cmd_table.add_row("", "")
+    cmd_table.add_row("swarm monitor", "Live-дашборд мониторинга (Rich)")
+    cmd_table.add_row("swarm tui", "Полноценный TUI-монитор (Textual)")
+
+    console.print(cmd_table)
+
+    console.print()
+    agent_table = Table(
+        title="Команды агентов (выполняются в терминале агента)",
+        show_header=True,
+        title_style="bold",
+        border_style="dim",
+        pad_edge=False,
+    )
+    agent_table.add_column("Команда", style="cyan", no_wrap=True)
+    agent_table.add_column("Описание")
+
+    agent_table.add_row("swarm join --cli тип --name имя --role роль", "Зарегистрироваться в системе")
+    agent_table.add_row("swarm next --agent имя", "Получить следующую задачу")
+    agent_table.add_row("swarm lock файл --agent имя", "Заблокировать файл перед правкой")
+    agent_table.add_row("swarm unlock --file файл", "Разблокировать файл после правки")
+    agent_table.add_row("swarm done --summary \"...\" --agent имя", "Завершить задачу с резюме")
+    agent_table.add_row("swarm status --agent имя", "Проверить свой статус")
+    agent_table.add_row("swarm heartbeat --agent имя --quiet", "Обновить heartbeat (при долгой работе)")
+
+    console.print(agent_table)
     console.print()

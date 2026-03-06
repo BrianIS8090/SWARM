@@ -23,18 +23,23 @@ class TaskStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     BLOCKED = "blocked"
+    FAILED = "failed"
 
 
 class EventType(str, Enum):
     """Типы событий для лога."""
     TASK_STARTED = "task_started"
     TASK_DONE = "task_done"
+    TASK_CREATED = "task_created"
+    TASK_ASSIGNED = "task_assigned"
+    TASK_FORCE_CLOSED = "task_force_closed"
     FILE_LOCKED = "file_locked"
     FILE_UNLOCKED = "file_unlocked"
     WAITING_FOR_LOCK = "waiting_for_lock"
     ERROR = "error"
     AGENT_REGISTERED = "agent_registered"
     AGENT_STARTED = "agent_started"
+    AGENT_CLEANUP = "agent_cleanup"
 
 
 @dataclass
@@ -52,19 +57,19 @@ class Agent:
     pid: int | None = None
 
     @classmethod
-    def from_row(cls, row: tuple) -> "Agent":
-        """Создать агента из строки БД."""
+    def from_row(cls, row) -> "Agent":
+        """Создать агента из строки БД (sqlite3.Row или dict-like)."""
         return cls(
-            agent_id=row[0],
-            session_token=row[1],
-            cli_type=row[2],
-            name=row[3],
-            role=row[4],
-            status=AgentStatus(row[5]),
-            current_task_id=row[6],
-            registered_at=datetime.fromisoformat(row[7]) if isinstance(row[7], str) else row[7],
-            last_heartbeat=datetime.fromisoformat(row[8]) if isinstance(row[8], str) else row[8],
-            pid=row[9],
+            agent_id=row["agent_id"],
+            session_token=row["session_token"],
+            cli_type=row["cli_type"],
+            name=row["name"],
+            role=row["role"],
+            status=AgentStatus(row["status"]),
+            current_task_id=row["current_task_id"],
+            registered_at=datetime.fromisoformat(row["registered_at"]) if isinstance(row["registered_at"], str) else row["registered_at"],
+            last_heartbeat=datetime.fromisoformat(row["last_heartbeat"]) if isinstance(row["last_heartbeat"], str) else row["last_heartbeat"],
+            pid=row["pid"],
         )
 
 
@@ -86,27 +91,27 @@ class Task:
     completed_at: datetime | None
 
     @classmethod
-    def from_row(cls, row: tuple) -> "Task":
-        """Создать задачу из строки БД."""
+    def from_row(cls, row) -> "Task":
+        """Создать задачу из строки БД (sqlite3.Row или dict-like)."""
         def parse_dt(val):
             if val is None:
                 return None
             return datetime.fromisoformat(val) if isinstance(val, str) else val
 
         return cls(
-            task_id=row[0],
-            description=row[1],
-            priority=row[2],
-            target_cli=row[3],
-            target_name=row[4],
-            target_role=row[5],
-            status=TaskStatus(row[6]),
-            assigned_to=row[7],
-            depends_on=row[8],
-            summary=row[9],
-            created_at=parse_dt(row[10]),
-            started_at=parse_dt(row[11]),
-            completed_at=parse_dt(row[12]),
+            task_id=row["task_id"],
+            description=row["description"],
+            priority=row["priority"],
+            target_cli=row["target_cli"],
+            target_name=row["target_name"],
+            target_role=row["target_role"],
+            status=TaskStatus(row["status"]),
+            assigned_to=row["assigned_to"],
+            depends_on=row["depends_on"],
+            summary=row["summary"],
+            created_at=parse_dt(row["created_at"]),
+            started_at=parse_dt(row["started_at"]),
+            completed_at=parse_dt(row["completed_at"]),
         )
 
 
@@ -120,14 +125,14 @@ class FileLock:
     locked_at: datetime
 
     @classmethod
-    def from_row(cls, row: tuple) -> "FileLock":
-        """Создать блокировку из строки БД."""
+    def from_row(cls, row) -> "FileLock":
+        """Создать блокировку из строки БД (sqlite3.Row или dict-like)."""
         return cls(
-            lock_id=row[0],
-            file_path=row[1],
-            locked_by=row[2],
-            task_id=row[3],
-            locked_at=datetime.fromisoformat(row[4]) if isinstance(row[4], str) else row[4],
+            lock_id=row["lock_id"],
+            file_path=row["file_path"],
+            locked_by=row["locked_by"],
+            task_id=row["task_id"],
+            locked_at=datetime.fromisoformat(row["locked_at"]) if isinstance(row["locked_at"], str) else row["locked_at"],
         )
 
 
@@ -142,13 +147,13 @@ class TaskLogEntry:
     timestamp: datetime
 
     @classmethod
-    def from_row(cls, row: tuple) -> "TaskLogEntry":
-        """Создать запись лога из строки БД."""
+    def from_row(cls, row) -> "TaskLogEntry":
+        """Создать запись лога из строки БД (sqlite3.Row или dict-like)."""
         return cls(
-            log_id=row[0],
-            task_id=row[1],
-            agent_id=row[2],
-            event=EventType(row[3]),
-            message=row[4],
-            timestamp=datetime.fromisoformat(row[5]) if isinstance(row[5], str) else row[5],
+            log_id=row["log_id"],
+            task_id=row["task_id"],
+            agent_id=row["agent_id"],
+            event=EventType(row["event"]),
+            message=row["message"],
+            timestamp=datetime.fromisoformat(row["timestamp"]) if isinstance(row["timestamp"], str) else row["timestamp"],
         )

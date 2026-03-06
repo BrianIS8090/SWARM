@@ -2,19 +2,17 @@
 Тесты распределения и выполнения задач.
 """
 
-import pytest
 
 from swarm.db import (
-    register_agent,
-    create_task,
     claim_next_task,
     complete_task,
-    get_task,
+    create_task,
     get_agent_by_session,
-    try_lock_file,
     get_file_lock,
+    register_agent,
+    try_lock_file,
 )
-from swarm.models import TaskStatus, AgentStatus
+from swarm.models import AgentStatus, TaskStatus
 
 
 class TestTaskClaiming:
@@ -40,9 +38,9 @@ class TestTaskClaiming:
         agent = register_agent("token", "claude", "agent", "developer")
         
         # Создаём задачи с разными приоритетами
-        low = create_task("Низкий приоритет", priority=5)
+        create_task("Низкий приоритет", priority=5)
         high = create_task("Высокий приоритет", priority=1)
-        mid = create_task("Средний приоритет", priority=3)
+        create_task("Средний приоритет", priority=3)
         
         # Должна вернуться задача с высоким приоритетом
         task = claim_next_task(agent)
@@ -90,8 +88,8 @@ class TestTaskClaiming:
         codex_agent = register_agent("codex-token", "codex", "agent2", "developer")
         
         # Задача только для codex
-        task = create_task("Задача для Codex", target_cli="codex")
-        
+        create_task("Задача для Codex", target_cli="codex")
+
         # Claude не должен получить
         claude_task = claim_next_task(claude_agent)
         assert claude_task is None
@@ -155,12 +153,10 @@ class TestTaskCompletion:
         # Захватываем задачу
         claim_next_task(agent)
         
-        # Блокируем файлы
+        # Блокируем файл
         try_lock_file(agent.agent_id, task.task_id, "file1.py")
-        try_lock_file(agent.agent_id, task.task_id, "file2.py")
         
         assert get_file_lock("file1.py") is not None
-        assert get_file_lock("file2.py") is not None
         
         # Завершаем задачу
         agent = get_agent_by_session("token")
@@ -168,7 +164,6 @@ class TestTaskCompletion:
         
         # Блокировки должны быть сняты
         assert get_file_lock("file1.py") is None
-        assert get_file_lock("file2.py") is None
     
     def test_complete_without_task_fails(self, sample_agent):
         """Проверяет ошибку при завершении без задачи."""

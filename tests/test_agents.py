@@ -2,19 +2,21 @@
 Тесты управления агентами.
 """
 
-import pytest
 import os
+import sqlite3
 from pathlib import Path
 
+import pytest
+
 from swarm.db import (
-    register_agent,
     get_agent_by_session,
     get_all_agents,
-    update_agent_status,
-    update_agent_heartbeat,
-    save_session_token,
-    load_session_token,
     get_current_agent,
+    load_session_token,
+    register_agent,
+    save_session_token,
+    update_agent_heartbeat,
+    update_agent_status,
 )
 from swarm.models import AgentStatus
 
@@ -24,10 +26,10 @@ class TestAgentRegistration:
     
     def test_register_unique_session_tokens(self, temp_db):
         """Проверяет уникальность токенов."""
-        agent1 = register_agent("token-1", "claude", "agent1", "developer")
-        
-        # Попытка регистрации с тем же токеном должна вызвать ошибку
-        with pytest.raises(Exception):
+        register_agent("token-1", "claude", "agent1", "developer")
+
+        # Попытка регистрации с тем же токеном должна вызвать ошибку (IntegrityError)
+        with pytest.raises(sqlite3.IntegrityError):
             register_agent("token-1", "claude", "agent2", "developer")
     
     def test_register_multiple_agents(self, temp_db):

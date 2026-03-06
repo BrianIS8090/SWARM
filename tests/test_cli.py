@@ -3,13 +3,11 @@
 """
 
 import os
-import pytest
-from pathlib import Path
+
 from typer.testing import CliRunner
 
 from swarm.cli import app
-from swarm.db import DB_FILENAME, SESSION_FILENAME
-
+from swarm.db import DB_FILENAME
 
 runner = CliRunner()
 
@@ -25,7 +23,7 @@ class TestInitCommand:
         
         assert result.exit_code == 0
         assert (tmp_path / DB_FILENAME).exists()
-        assert "SWARM инициализирован успешно" in result.stdout
+        assert "инициализирован" in result.stdout
     
     def test_init_creates_skills(self, tmp_path, monkeypatch):
         """Проверяет создание скиллов для агентов и оркестратора."""
@@ -39,7 +37,42 @@ class TestInitCommand:
         assert (tmp_path / ".codex" / "skills" / "swarm-agent" / "SKILL.md").exists()
         # Скилл оркестратора
         assert (tmp_path / ".claude" / "skills" / "swarm-orchestrator" / "SKILL.md").exists()
-    
+
+        skill_text = (tmp_path / ".codex" / "skills" / "swarm-agent" / "SKILL.md").read_text(encoding="utf-8")
+        assert "одна активная блокировка на агента" in skill_text
+        assert "swarm heartbeat --agent" in skill_text
+        assert "Не используй `swarm --help`" in skill_text
+
+
+class TestHelpSuppression:
+    """Тесты отключения встроенной справки."""
+
+    def test_root_help_is_disabled(self):
+        """Корневой --help не должен раскрывать список команд."""
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code != 0
+        assert "No such option: --help" in result.stderr
+        assert "Commands" not in result.stderr
+        assert "init" not in result.stderr
+
+    def test_subcommand_help_is_disabled(self):
+        """Подкоманды не должны поддерживать --help."""
+        result = runner.invoke(app, ["task", "add", "--help"])
+
+        assert result.exit_code != 0
+        assert "No such option: --help" in result.stderr
+        assert "Описание задачи" not in result.stderr
+
+    def test_no_args_do_not_show_command_catalog(self):
+        """Запуск без аргументов не должен печатать каталог команд."""
+        result = runner.invoke(app, [])
+
+        assert result.exit_code != 0
+        assert "Missing command" in result.stderr
+        assert "Commands" not in result.stderr
+        assert "join" not in result.stderr
+
     def test_init_refuses_without_force(self, tmp_path, monkeypatch):
         """Проверяет отказ перезаписи без --force."""
         monkeypatch.chdir(tmp_path)
@@ -61,7 +94,7 @@ class TestInitCommand:
         result = runner.invoke(app, ["init", "--force"])
         
         assert result.exit_code == 0
-        assert "SWARM инициализирован успешно" in result.stdout
+        assert "инициализирован" in result.stdout
 
 
 class TestTaskCommands:
@@ -185,6 +218,17 @@ class TestAgentCommands:
         assert "bob" in result.stdout
         assert "tester" in result.stdout
 
+    def test_heartbeat_updates_agent(self, tmp_path, monkeypatch):
+        """Проверяет отдельную команду heartbeat."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "bob", "--role", "tester"])
+
+        result = runner.invoke(app, ["heartbeat"])
+
+        assert result.exit_code == 0
+        assert "Heartbeat обновлён" in result.stdout
+
 
 class TestNextAndDone:
     """Тесты получения и завершения задач."""
@@ -238,6 +282,46 @@ class TestNextAndDone:
         assert "нет активной задачи" in result.stdout
 
 
+class TestPermissions:
+    """Тесты ограничений прав для агента."""
+
+    def test_agent_cannot_add_task(self, tmp_path, monkeypatch):
+        """Агент не должен менять очередь задач."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
+
+        result = runner.invoke(app, ["task", "add", "--desc", "Нельзя", "--priority", "1"])
+
+        assert result.exit_code == 1
+        assert "не может изменять очередь задач" in result.stdout
+
+    def test_anonymous_cannot_force_unlock(self, tmp_path, monkeypatch):
+        """Анонимный процесс без сессии не должен использовать --force."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        # Без регистрации агента — анонимный процесс
+        result = runner.invoke(app, ["unlock", "--force", "--file", "file.py"])
+
+        assert result.exit_code == 1
+        assert "требуется активная сессия" in result.stdout
+
+    def test_agent_can_force_unlock_own_file(self, tmp_path, monkeypatch):
+        """Зарегистрированный агент может использовать --force для разблокировки."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
+        runner.invoke(app, ["next"])
+        runner.invoke(app, ["lock", "file.py"])
+
+        result = runner.invoke(app, ["unlock", "--force", "--file", "file.py"])
+
+        assert result.exit_code == 0
+        assert "разблокирован" in result.stdout.lower()
+
+
 class TestStartCommand:
     """Тесты команды start."""
     
@@ -271,6 +355,125 @@ class TestStartCommand:
         assert "2 агентов" in result.stdout
 
 
+class TestTaskCloseCommand:
+    """Тесты команды task close."""
+
+    def test_close_task(self, tmp_path, monkeypatch):
+        """Принудительное закрытие задачи через CLI."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Для закрытия", "--priority", "1"])
+
+        result = runner.invoke(app, ["task", "close", "1", "--reason", "Тестовое закрытие"])
+
+        assert result.exit_code == 0
+        assert "принудительно закрыта" in result.stdout
+
+    def test_close_nonexistent_task(self, tmp_path, monkeypatch):
+        """Закрытие несуществующей задачи даёт ошибку."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        result = runner.invoke(app, ["task", "close", "999"])
+
+        assert result.exit_code == 1
+        assert "не найдена" in result.stdout
+
+    def test_agent_cannot_close_task(self, tmp_path, monkeypatch):
+        """Агент не может закрывать задачи."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
+
+        result = runner.invoke(app, ["task", "close", "1"])
+
+        assert result.exit_code == 1
+        assert "не может изменять очередь задач" in result.stdout
+
+
+class TestTaskAssignCommand:
+    """Тесты команды task assign."""
+
+    def test_assign_task(self, tmp_path, monkeypatch):
+        """Назначение задачи через CLI."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Для назначения", "--priority", "1"])
+
+        result = runner.invoke(app, ["task", "assign", "1", "--agent", "worker-1"])
+
+        assert result.exit_code == 0
+        assert "назначена" in result.stdout
+
+    def test_assign_nonexistent_task(self, tmp_path, monkeypatch):
+        """Назначение несуществующей задачи даёт ошибку."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        result = runner.invoke(app, ["task", "assign", "999", "--agent", "x"])
+
+        assert result.exit_code == 1
+        assert "не найдена" in result.stdout
+
+
+class TestLockUnlockCommands:
+    """Тесты команд lock и unlock."""
+
+    def test_lock_and_unlock(self, tmp_path, monkeypatch):
+        """Полный цикл блокировки и разблокировки."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "locker", "--role", "developer"])
+        runner.invoke(app, ["next"])
+
+        # Блокируем
+        result = runner.invoke(app, ["lock", "test.py"])
+        assert result.exit_code == 0
+        assert "Заблокирован" in result.stdout
+
+        # Разблокируем
+        result = runner.invoke(app, ["unlock", "--file", "test.py"])
+        assert result.exit_code == 0
+        assert "разблокирован" in result.stdout.lower()
+
+    def test_lock_without_task_fails(self, tmp_path, monkeypatch):
+        """Блокировка без активной задачи даёт ошибку."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "idle-agent", "--role", "developer"])
+
+        result = runner.invoke(app, ["lock", "file.py"])
+
+        assert result.exit_code == 1
+        assert "нет активной задачи" in result.stdout
+
+    def test_unlock_all_force(self, tmp_path, monkeypatch):
+        """unlock --all --force снимает все блокировки."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "force-agent", "--role", "developer"])
+        runner.invoke(app, ["next"])
+        runner.invoke(app, ["lock", "a.py"])
+
+        result = runner.invoke(app, ["unlock", "--all", "--force"])
+
+        assert result.exit_code == 0
+        assert "Снято блокировок" in result.stdout
+
+    def test_anonymous_cannot_unlock_all_force(self, tmp_path, monkeypatch):
+        """Анонимный процесс не может использовать --all --force."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        result = runner.invoke(app, ["unlock", "--all", "--force"])
+
+        assert result.exit_code == 1
+        assert "требуется активная сессия" in result.stdout
+
+
 class TestLogsCommand:
     """Тесты команды logs."""
     
@@ -296,3 +499,36 @@ class TestLogsCommand:
         assert result.exit_code == 0
         # Текст может быть усечён в таблице, ищем часть
         assert "agent_register" in result.stdout or "зарегистрирован" in result.stdout
+
+    def test_logs_with_limit(self, tmp_path, monkeypatch):
+        """Проверяет параметр --limit."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "lim-agent", "--role", "developer"])
+
+        result = runner.invoke(app, ["logs", "-n", "5"])
+
+        assert result.exit_code == 0
+        assert "лимит: 5" in result.stdout
+
+    def test_logs_with_since(self, tmp_path, monkeypatch):
+        """Проверяет параметр --since."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "since-agent", "--role", "developer"])
+
+        result = runner.invoke(app, ["logs", "--since", "1"])
+
+        assert result.exit_code == 0
+        assert "за последние 1.0ч" in result.stdout
+
+    def test_task_add_logs_event(self, tmp_path, monkeypatch):
+        """Создание задачи записывает task_created в лог."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Тестовая задача", "--priority", "2"])
+
+        result = runner.invoke(app, ["logs"])
+
+        assert result.exit_code == 0
+        assert "task_created" in result.stdout

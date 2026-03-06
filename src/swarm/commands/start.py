@@ -8,17 +8,11 @@
 import typer
 from rich.console import Console
 
-from ..db import find_db_path, get_all_agents, log_event
+from ..db import get_all_agents, log_event
 from ..models import EventType
+from ..utils import check_db as _check_db
 
 console = Console()
-
-
-def _check_db():
-    """Проверяет наличие БД."""
-    if find_db_path() is None:
-        console.print("[red]✗ SWARM не инициализирован. Выполните 'swarm init' сначала.[/red]")
-        raise typer.Exit(1)
 
 
 def start_command(

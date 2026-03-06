@@ -9,7 +9,7 @@ Live-дашборд с 4 панелями:
 """
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import typer
 from rich.console import Console
@@ -19,22 +19,16 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..db import (
-    find_db_path,
     get_all_agents,
     get_all_locks,
     get_all_tasks,
     get_recent_events,
+    is_process_alive,
 )
 from ..models import AgentStatus, TaskStatus
+from ..utils import check_db as _check_db
 
 console = Console()
-
-
-def _check_db():
-    """Проверяет наличие БД."""
-    if find_db_path() is None:
-        console.print("[red]✗ SWARM не инициализирован. Выполните 'swarm init' сначала.[/red]")
-        raise typer.Exit(1)
 
 
 def create_agents_panel() -> Panel:
@@ -64,10 +58,11 @@ def create_agents_panel() -> Panel:
         AgentStatus.DONE: ("blue", "✓"),
     }
 
-    now = datetime.now()
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for agent in agents:
         style, icon = status_styles.get(agent.status, ("white", ""))
+        pid_alive = is_process_alive(agent.pid) if agent.pid is not None else None
 
         # Heartbeat
         if agent.last_heartbeat:
@@ -80,9 +75,11 @@ def create_agents_panel() -> Panel:
             else:
                 hb = f"{secs // 3600}ч"
 
-            # Подсветка мёртвых
-            if secs > 300:
+            # Старый heartbeat — это предупреждение, а не автоматический признак зависания
+            if secs > 300 and pid_alive is not True:
                 hb = f"[red]{hb}[/red]"
+            elif secs > 300:
+                hb = f"[yellow]{hb}*[/yellow]"
         else:
             hb = "-"
 
@@ -107,11 +104,10 @@ def create_agents_panel() -> Panel:
 
 def create_tasks_panel(show_done: bool = False, full_desc: bool = False) -> Panel:
     """Создаёт панель задач."""
-    tasks = get_all_tasks()
+    all_tasks = get_all_tasks()
     agents = {a.agent_id: a for a in get_all_agents()}
 
-    if not show_done:
-        tasks = [t for t in tasks if t.status != TaskStatus.DONE]
+    tasks = all_tasks if show_done else [t for t in all_tasks if t.status != TaskStatus.DONE]
 
     if not tasks:
         return Panel(
@@ -196,8 +192,8 @@ def create_tasks_panel(show_done: bool = False, full_desc: bool = False) -> Pane
             )
         content = table
 
-    total = len(get_all_tasks())
-    active = len([t for t in get_all_tasks() if t.status != TaskStatus.DONE])
+    total = len(all_tasks)
+    active = len([t for t in all_tasks if t.status != TaskStatus.DONE])
 
     return Panel(
         content,
@@ -223,7 +219,7 @@ def create_locks_panel() -> Panel:
     table.add_column("Агент", width=12)
     table.add_column("Время", width=8)
 
-    now = datetime.now()
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for lock in locks:
         agent = agents.get(lock.locked_by)

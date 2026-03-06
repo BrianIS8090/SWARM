@@ -10,7 +10,7 @@
 
 import os
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import typer
 from rich.console import Console
@@ -22,24 +22,19 @@ from ..db import (
     claim_next_task,
     cleanup_dead_agents,
     complete_task,
-    find_db_path,
     get_agent_by_name,
     get_all_agents,
     get_current_agent,
+    is_process_alive,
     register_agent,
     save_session_token,
     update_agent_heartbeat,
 )
 from ..models import AgentStatus
+from ..utils import CLI_TYPES
+from ..utils import check_db as _check_db
 
 console = Console()
-
-
-def _check_db():
-    """Проверяет наличие БД."""
-    if find_db_path() is None:
-        console.print("[red]✗ SWARM не инициализирован. Выполните 'swarm init' сначала.[/red]")
-        raise typer.Exit(1)
 
 
 def _check_agent(agent_name: str | None = None):
@@ -89,17 +84,16 @@ def join_command(
             raise typer.Exit(0)
 
     # Запрашиваем данные интерактивно, если не указаны
-    valid_cli_types = ["claude", "codex", "gemini", "opencode", "qwen"]
     valid_roles = ["architect", "developer", "tester", "devops"]
 
     if cli_type is None:
         cli_type = Prompt.ask(
             "Тип CLI",
-            choices=valid_cli_types,
+            choices=CLI_TYPES,
             default="claude",
         )
-    elif cli_type not in valid_cli_types:
-        console.print(f"[red]✗ Неверный тип CLI. Допустимые: {', '.join(valid_cli_types)}[/red]")
+    elif cli_type not in CLI_TYPES:
+        console.print(f"[red]✗ Неверный тип CLI. Допустимые: {', '.join(CLI_TYPES)}[/red]")
         raise typer.Exit(1)
 
     if name is None:
@@ -194,10 +188,11 @@ def agents_command(
         AgentStatus.DONE: "blue",
     }
 
-    now = datetime.now()
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     for agent in agents:
         color = status_colors.get(agent.status, "white")
+        pid_alive = is_process_alive(agent.pid) if agent.pid is not None else None
 
         # Вычисляем время с последнего heartbeat
         if agent.last_heartbeat:
@@ -209,9 +204,11 @@ def agents_command(
             else:
                 hb_str = f"{int(delta.total_seconds() / 3600)}ч назад"
 
-            # Подсвечиваем мёртвых агентов
-            if delta.total_seconds() > 300:  # 5 минут
+            # Старый heartbeat — это предупреждение, а не признак смерти процесса
+            if delta.total_seconds() > 300 and pid_alive is not True:
                 hb_str = f"[red]{hb_str}[/red]"
+            elif delta.total_seconds() > 300:
+                hb_str = f"[yellow]{hb_str} (PID жив)[/yellow]"
         else:
             hb_str = "-"
 
@@ -269,9 +266,10 @@ def next_command(
     console.print()
     console.print("Следующие шаги:")
     console.print("  1. Определи, какие файлы нужно изменить")
-    console.print("  2. Заблокируй их: [cyan]swarm lock файл1 файл2[/cyan]")
-    console.print("  3. Выполни работу")
-    console.print("  4. Заверши: [cyan]swarm done --summary \"...\"[/cyan]")
+    console.print("  2. Заблокируй один файл: [cyan]swarm lock путь/к/файлу[/cyan]")
+    console.print("  3. Выполни правки и сразу разблокируй: [cyan]swarm unlock --file путь/к/файлу[/cyan]")
+    console.print("  4. Если работа долгая, обновляй heartbeat: [cyan]swarm heartbeat --quiet[/cyan]")
+    console.print("  5. Заверши: [cyan]swarm done --summary \"...\"[/cyan]")
     console.print()
 
 
@@ -341,3 +339,17 @@ def status_command(
         border_style="blue",
     ))
     console.print()
+
+
+def heartbeat_command(
+    agent_name: str | None = typer.Option(None, "--agent", "-a", help="Имя агента (если не указан — из сессии)"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Не печатать подтверждение"),
+):
+    """
+    Обновляет heartbeat текущего агента.
+    """
+    agent = _check_agent(agent_name)
+    update_agent_heartbeat(agent.agent_id)
+
+    if not quiet:
+        console.print(f"[green]✓ Heartbeat обновлён для агента {agent.name}[/green]")
