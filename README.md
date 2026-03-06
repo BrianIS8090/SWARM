@@ -14,9 +14,10 @@
 
 ***
 
-<img width="2529" height="1323" alt="SWARM Monitor — live-дашборд" src="https://github.com/user-attachments/assets/0d05ba34-7886-459f-844b-d2132f9f832c" />
+<img width="2752" height="1536" alt="lumigen-zlay5lank" src="https://github.com/user-attachments/assets/545c7248-c30b-43d6-aa8c-af938a7fbf2b" />
 
-<img width="2330" height="1343" alt="SWARM TUI — терминальный интерфейс" src="https://github.com/user-attachments/assets/4780894c-ae0e-4302-9efa-831ff8f1802d" />
+
+<img width="2529" height="1323" alt="SWARM Monitor — live-дашборд" src="https://github.com/user-attachments/assets/0d05ba34-7886-459f-844b-d2132f9f832c" />
 
 </div>
 
