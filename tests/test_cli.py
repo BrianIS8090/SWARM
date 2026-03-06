@@ -27,14 +27,18 @@ class TestInitCommand:
         assert (tmp_path / DB_FILENAME).exists()
         assert "SWARM инициализирован успешно" in result.stdout
     
-    def test_init_creates_skills_md(self, tmp_path, monkeypatch):
-        """Проверяет создание SKILLS.md."""
+    def test_init_creates_skills(self, tmp_path, monkeypatch):
+        """Проверяет создание скиллов для агентов и оркестратора."""
         monkeypatch.chdir(tmp_path)
-        
+
         result = runner.invoke(app, ["init"])
-        
+
         assert result.exit_code == 0
-        assert (tmp_path / "SKILLS.md").exists()
+        # Скиллы агентов
+        assert (tmp_path / ".claude" / "skills" / "swarm-agent" / "SKILL.md").exists()
+        assert (tmp_path / ".codex" / "skills" / "swarm-agent" / "SKILL.md").exists()
+        # Скилл оркестратора
+        assert (tmp_path / ".claude" / "skills" / "swarm-orchestrator" / "SKILL.md").exists()
     
     def test_init_refuses_without_force(self, tmp_path, monkeypatch):
         """Проверяет отказ перезаписи без --force."""

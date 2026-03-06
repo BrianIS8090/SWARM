@@ -26,7 +26,7 @@ swarm init
 
 Это создаст:
 - `swarm.db` — база данных для задач и агентов
-- `SKILLS.md` — инструкция для LLM-агентов
+- `SKILL.md` — инструкции для LLM-агентов (в папках `.claude/`, `.codex/`, `.gemini/` и др.)
 
 ### 3. Создание задач
 
@@ -56,7 +56,7 @@ swarm task add --desc "Написать тесты" --priority 2 --depends-on 1
 claude
 
 # В Claude скажите:
-# "Прочитай SKILLS.md и зарегистрируйся через swarm join"
+# "Зарегистрируйся через swarm join"
 ```
 
 Агент выполнит:
