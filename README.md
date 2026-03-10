@@ -16,8 +16,9 @@
 
 <img width="2752" height="1536" alt="lumigen-zlay5lank" src="https://github.com/user-attachments/assets/545c7248-c30b-43d6-aa8c-af938a7fbf2b" />
 
+<img width="2521" height="1348" alt="Снимок экрана 2026-03-10 164045" src="https://github.com/user-attachments/assets/bff744ef-3948-4015-bcc8-e83785eca933" />
 
-<img width="2529" height="1323" alt="SWARM Monitor — live-дашборд" src="https://github.com/user-attachments/assets/0d05ba34-7886-459f-844b-d2132f9f832c" />
+
 
 </div>
 
