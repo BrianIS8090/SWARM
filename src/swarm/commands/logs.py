@@ -4,7 +4,6 @@
 Показывает историю событий из task_log.
 """
 
-
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -19,7 +18,9 @@ def logs_command(
     limit: int = typer.Option(50, "--limit", "-n", help="Количество записей (по умолчанию 50)"),
     task_id: int | None = typer.Option(None, "--task", "-t", help="Фильтр по ID задачи"),
     agent_name: str | None = typer.Option(None, "--agent", "-a", help="Фильтр по имени агента"),
-    since: float | None = typer.Option(None, "--since", "-s", help="Показать события за последние N часов (например: 0.5, 1, 24)"),
+    since: float | None = typer.Option(
+        None, "--since", "-s", help="Показать события за последние N часов (например: 0.5, 1, 24)"
+    ),
     follow: bool = typer.Option(False, "--follow", "-f", help="Следить за новыми событиями"),
 ):
     """
@@ -71,6 +72,14 @@ def logs_command(
         "agent_registered": "cyan",
         "agent_started": "green",
         "agent_cleanup": "red",
+        "launch_session_created": "cyan",
+        "launch_session_approved": "green",
+        "launch_started": "green",
+        "launch_agent_started": "green",
+        "launch_agent_registered": "blue",
+        "launch_agent_failed": "red",
+        "launch_session_completed": "blue",
+        "launch_session_stopped": "yellow",
     }
 
     for event in events:

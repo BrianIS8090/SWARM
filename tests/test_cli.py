@@ -2,29 +2,30 @@
 Интеграционные тесты CLI.
 """
 
+import json
 import os
 
 from typer.testing import CliRunner
 
 from swarm.cli import app
-from swarm.db import DB_FILENAME
+from swarm.db import DB_FILENAME, get_launch_sessions
 
 runner = CliRunner()
 
 
 class TestInitCommand:
     """Тесты команды init."""
-    
+
     def test_init_creates_database(self, tmp_path, monkeypatch):
         """Проверяет создание БД."""
         monkeypatch.chdir(tmp_path)
-        
+
         result = runner.invoke(app, ["init"])
-        
+
         assert result.exit_code == 0
         assert (tmp_path / DB_FILENAME).exists()
         assert "инициализирован" in result.stdout
-    
+
     def test_init_creates_skills(self, tmp_path, monkeypatch):
         """Проверяет создание скиллов для агентов и оркестратора."""
         monkeypatch.chdir(tmp_path)
@@ -76,79 +77,92 @@ class TestHelpSuppression:
     def test_init_refuses_without_force(self, tmp_path, monkeypatch):
         """Проверяет отказ перезаписи без --force."""
         monkeypatch.chdir(tmp_path)
-        
+
         # Первая инициализация
         runner.invoke(app, ["init"])
-        
+
         # Попытка повторной
         result = runner.invoke(app, ["init"])
-        
+
         assert result.exit_code == 1
         assert "уже существует" in result.stdout
-    
+
     def test_init_force_recreates(self, tmp_path, monkeypatch):
         """Проверяет пересоздание с --force."""
         monkeypatch.chdir(tmp_path)
-        
+
         runner.invoke(app, ["init"])
         result = runner.invoke(app, ["init", "--force"])
-        
+
         assert result.exit_code == 0
         assert "инициализирован" in result.stdout
 
 
 class TestTaskCommands:
     """Тесты команд управления задачами."""
-    
+
     def test_task_add(self, tmp_path, monkeypatch):
         """Проверяет создание задачи."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
-        result = runner.invoke(app, [
-            "task", "add",
-            "--desc", "Тестовая задача",
-            "--priority", "1",
-        ])
-        
+
+        result = runner.invoke(
+            app,
+            [
+                "task",
+                "add",
+                "--desc",
+                "Тестовая задача",
+                "--priority",
+                "1",
+            ],
+        )
+
         assert result.exit_code == 0
         assert "Задача #1 создана" in result.stdout
-    
+
     def test_task_add_with_filters(self, tmp_path, monkeypatch):
         """Проверяет создание задачи с фильтрами."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
-        result = runner.invoke(app, [
-            "task", "add",
-            "--desc", "Задача для архитектора",
-            "--role", "architect",
-            "--cli", "claude",
-        ])
-        
+
+        result = runner.invoke(
+            app,
+            [
+                "task",
+                "add",
+                "--desc",
+                "Задача для архитектора",
+                "--role",
+                "architect",
+                "--cli",
+                "claude",
+            ],
+        )
+
         assert result.exit_code == 0
         assert "role=architect" in result.stdout
         assert "cli=claude" in result.stdout
-    
+
     def test_task_list_empty(self, tmp_path, monkeypatch):
         """Проверяет пустой список задач."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
+
         result = runner.invoke(app, ["task", "list"])
-        
+
         assert result.exit_code == 0
         assert "Задач не найдено" in result.stdout
-    
+
     def test_task_list_with_tasks(self, tmp_path, monkeypatch):
         """Проверяет список с задачами."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["task", "add", "--desc", "Задача 1", "--priority", "1"])
         runner.invoke(app, ["task", "add", "--desc", "Задача 2", "--priority", "2"])
-        
+
         result = runner.invoke(app, ["task", "list"])
-        
+
         assert result.exit_code == 0
         assert "Задача 1" in result.stdout
         assert "Задача 2" in result.stdout
@@ -156,64 +170,70 @@ class TestTaskCommands:
 
 class TestAgentCommands:
     """Тесты команд агентов."""
-    
+
     def test_join_interactive(self, tmp_path, monkeypatch):
         """Проверяет регистрацию агента."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
-        result = runner.invoke(app, [
-            "join",
-            "--cli", "claude",
-            "--name", "test-agent",
-            "--role", "developer",
-        ])
-        
+
+        result = runner.invoke(
+            app,
+            [
+                "join",
+                "--cli",
+                "claude",
+                "--name",
+                "test-agent",
+                "--role",
+                "developer",
+            ],
+        )
+
         assert result.exit_code == 0
         assert "Зарегистрирован как агент #1" in result.stdout
         # Теперь файл сессии именуется по имени агента
         assert (tmp_path / ".swarm_session_test-agent").exists()
-    
+
     def test_agents_empty(self, tmp_path, monkeypatch):
         """Проверяет пустой список агентов."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
+
         result = runner.invoke(app, ["agents"])
-        
+
         assert result.exit_code == 0
         assert "агентов нет" in result.stdout
-    
+
     def test_agents_with_registered(self, tmp_path, monkeypatch):
         """Проверяет список с агентами."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "alice", "--role", "developer"])
-        
+
         result = runner.invoke(app, ["agents"])
-        
+
         assert result.exit_code == 0
         assert "alice" in result.stdout
         assert "claude" in result.stdout
-    
+
     def test_status_not_registered(self, tmp_path, monkeypatch):
         """Проверяет ошибку статуса без регистрации."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
+
         result = runner.invoke(app, ["status"])
-        
+
         assert result.exit_code == 1
         assert "не зарегистрирован" in result.stdout
-    
+
     def test_status_registered(self, tmp_path, monkeypatch):
         """Проверяет статус зарегистрированного агента."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "bob", "--role", "tester"])
-        
+
         result = runner.invoke(app, ["status"])
-        
+
         assert result.exit_code == 0
         assert "bob" in result.stdout
         assert "tester" in result.stdout
@@ -232,31 +252,31 @@ class TestAgentCommands:
 
 class TestNextAndDone:
     """Тесты получения и завершения задач."""
-    
+
     def test_next_no_tasks(self, tmp_path, monkeypatch):
         """Проверяет поведение при отсутствии задач."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
-        
+
         result = runner.invoke(app, ["next"])
-        
+
         assert result.exit_code == 0
         assert "Нет подходящих задач" in result.stdout
-    
+
     def test_next_gets_task(self, tmp_path, monkeypatch):
         """Проверяет получение задачи."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["task", "add", "--desc", "Реализовать функцию", "--priority", "1"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
-        
+
         result = runner.invoke(app, ["next"])
-        
+
         assert result.exit_code == 0
         assert "Задача #1" in result.stdout
         assert "Реализовать функцию" in result.stdout
-    
+
     def test_done_completes_task(self, tmp_path, monkeypatch):
         """Проверяет завершение задачи."""
         monkeypatch.chdir(tmp_path)
@@ -264,20 +284,20 @@ class TestNextAndDone:
         runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
         runner.invoke(app, ["next"])
-        
+
         result = runner.invoke(app, ["done", "--summary", "Готово"])
-        
+
         assert result.exit_code == 0
         assert "Задача #1 завершена" in result.stdout
-    
+
     def test_done_without_task_fails(self, tmp_path, monkeypatch):
         """Проверяет ошибку завершения без задачи."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
-        
+
         result = runner.invoke(app, ["done", "--summary", "Что-то"])
-        
+
         assert result.exit_code == 1
         assert "нет активной задачи" in result.stdout
 
@@ -324,23 +344,23 @@ class TestPermissions:
 
 class TestStartCommand:
     """Тесты команды start."""
-    
+
     def test_start_no_agents(self, tmp_path, monkeypatch):
         """Проверяет start без агентов."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
+
         result = runner.invoke(app, ["start", "--all"])
-        
+
         assert result.exit_code == 0
         assert "Нет зарегистрированных агентов" in result.stdout
-    
+
     def test_start_all(self, tmp_path, monkeypatch):
         """Проверяет start --all."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "agent1", "--role", "developer"])
-        
+
         # Очищаем переменные окружения для регистрации второго агента
         # (теперь у каждого агента свой файл .swarm_session_<имя>)
         if "SWARM_SESSION" in os.environ:
@@ -348,9 +368,9 @@ class TestStartCommand:
         if "SWARM_AGENT" in os.environ:
             del os.environ["SWARM_AGENT"]
         runner.invoke(app, ["join", "--cli", "codex", "--name", "agent2", "--role", "tester"])
-        
+
         result = runner.invoke(app, ["start", "--all"])
-        
+
         assert result.exit_code == 0
         assert "2 агентов" in result.stdout
 
@@ -476,26 +496,26 @@ class TestLockUnlockCommands:
 
 class TestLogsCommand:
     """Тесты команды logs."""
-    
+
     def test_logs_empty(self, tmp_path, monkeypatch):
         """Проверяет пустой журнал."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
-        
+
         result = runner.invoke(app, ["logs"])
-        
+
         # При init создаётся только БД, событий пока нет
         # Но после join появятся
         assert result.exit_code == 0
-    
+
     def test_logs_with_events(self, tmp_path, monkeypatch):
         """Проверяет журнал с событиями."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
         runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
-        
+
         result = runner.invoke(app, ["logs"])
-        
+
         assert result.exit_code == 0
         # Текст может быть усечён в таблице, ищем часть
         assert "agent_register" in result.stdout or "зарегистрирован" in result.stdout
@@ -532,3 +552,162 @@ class TestLogsCommand:
 
         assert result.exit_code == 0
         assert "task_created" in result.stdout
+
+
+class TestTerminalCommands:
+    """Тесты команды swarm terminal."""
+
+    def test_terminal_launch_dry_run(self, tmp_path, monkeypatch):
+        """dry-run создаёт launch session без старта wt."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        from swarm.commands import terminal as terminal_cmd
+
+        monkeypatch.setattr(terminal_cmd, "run_preflight", lambda spec, require_wt=True: [])
+
+        spec = {
+            "version": 1,
+            "working_directory": str(tmp_path),
+            "approval_mode": "safe",
+            "layout": {
+                "mode": "single",
+                "max_panes_per_window": 4,
+            },
+            "agents": [
+                {
+                    "cli": "claude",
+                    "name": "term-dev-1",
+                    "role": "developer",
+                    "window": 1,
+                    "pane": 1,
+                }
+            ],
+        }
+        spec_path = tmp_path / "launch-spec.json"
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+        result = runner.invoke(app, ["terminal", "launch", "--spec", str(spec_path), "--yes", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert "Dry-run выполнен" in result.stdout
+        assert len(get_launch_sessions()) == 1
+
+    def test_terminal_reconcile_marks_registered(self, tmp_path, monkeypatch):
+        """reconcile отображает зарегистрированного агента."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        from swarm.commands import terminal as terminal_cmd
+
+        monkeypatch.setattr(terminal_cmd, "run_preflight", lambda spec, require_wt=True: [])
+
+        spec = {
+            "version": 1,
+            "working_directory": str(tmp_path),
+            "approval_mode": "safe",
+            "layout": {
+                "mode": "single",
+                "max_panes_per_window": 4,
+            },
+            "agents": [
+                {
+                    "cli": "claude",
+                    "name": "term-reconcile-1",
+                    "role": "developer",
+                }
+            ],
+        }
+        spec_path = tmp_path / "launch-spec-reconcile.json"
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+        launch_result = runner.invoke(app, ["terminal", "launch", "--spec", str(spec_path), "--yes", "--dry-run"])
+        assert launch_result.exit_code == 0
+
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "term-reconcile-1", "--role", "developer"])
+
+        session_id = get_launch_sessions()[0].session_id
+        reconcile_result = runner.invoke(app, ["terminal", "reconcile", "--session", session_id])
+
+        assert reconcile_result.exit_code == 0
+        assert "registered" in reconcile_result.stdout.lower()
+
+    def test_terminal_launch_exclude_cli(self, tmp_path, monkeypatch):
+        """--exclude-cli создаёт отдельный spec для исключённых агентов."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        from swarm.commands import terminal as terminal_cmd
+
+        monkeypatch.setattr(terminal_cmd, "run_preflight", lambda spec, require_wt=True: [])
+
+        spec = {
+            "version": 1,
+            "working_directory": str(tmp_path),
+            "approval_mode": "yolo",
+            "layout": {
+                "mode": "mixed",
+                "max_panes_per_window": 4,
+            },
+            "agents": [
+                {"cli": "claude", "name": "arch-1", "role": "architect"},
+                {"cli": "codex", "name": "dev-1", "role": "developer"},
+                {"cli": "gemini", "name": "front-1", "role": "developer"},
+            ],
+        }
+        spec_path = tmp_path / "launch-spec.json"
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+        result = runner.invoke(
+            app,
+            ["terminal", "launch", "--spec", str(spec_path), "--exclude-cli", "claude", "--yes", "--dry-run"],
+        )
+
+        assert result.exit_code == 0
+        # Проверяем, что создан excluded spec
+        excluded_path = tmp_path / "launch-spec-excluded.json"
+        assert excluded_path.exists()
+        excluded_data = json.loads(excluded_path.read_text(encoding="utf-8"))
+        assert len(excluded_data["agents"]) == 1
+        assert excluded_data["agents"][0]["cli"] == "claude"
+        assert excluded_data["agents"][0]["name"] == "arch-1"
+        # Проверяем вывод с командой для пользователя
+        assert "Ручной запуск" in result.stdout
+        assert "swarm terminal launch --spec" in result.stdout
+
+    def test_terminal_stop(self, tmp_path, monkeypatch):
+        """stop переводит launch session в stopped."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        from swarm.commands import terminal as terminal_cmd
+
+        monkeypatch.setattr(terminal_cmd, "run_preflight", lambda spec, require_wt=True: [])
+
+        spec = {
+            "version": 1,
+            "working_directory": str(tmp_path),
+            "approval_mode": "safe",
+            "layout": {
+                "mode": "single",
+                "max_panes_per_window": 4,
+            },
+            "agents": [
+                {
+                    "cli": "claude",
+                    "name": "term-stop-1",
+                    "role": "developer",
+                }
+            ],
+        }
+        spec_path = tmp_path / "launch-spec-stop.json"
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+        launch_result = runner.invoke(app, ["terminal", "launch", "--spec", str(spec_path), "--yes", "--dry-run"])
+        assert launch_result.exit_code == 0
+
+        session_id = get_launch_sessions()[0].session_id
+        stop_result = runner.invoke(app, ["terminal", "stop", "--session", session_id])
+
+        assert stop_result.exit_code == 0
+        assert "остановлена" in stop_result.stdout.lower()

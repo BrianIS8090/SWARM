@@ -48,6 +48,7 @@ swarm.db-wal
 swarm.db-shm
 .swarm_session
 .swarm_session_*
+.swarm_pids/
 
 # OS
 .DS_Store

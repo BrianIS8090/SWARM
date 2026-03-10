@@ -10,65 +10,74 @@ import pytest
 
 from swarm.db import (
     DB_FILENAME,
+    add_launch_session_agent,
     assign_task_to_agent,
     claim_next_task,
     cleanup_dead_agents,
     complete_task,
+    create_launch_session,
     create_task,
     find_db_path,
     force_close_task,
+    get_active_launch_agent_names,
     get_agent_by_name,
     get_agent_by_session,
     get_all_agents,
     get_all_locks,
     get_all_tasks,
     get_file_lock,
+    get_launch_session,
+    get_launch_session_agents,
+    get_launch_sessions,
     get_recent_events,
     get_task,
     init_database,
     log_event,
+    reconcile_launch_session,
     register_agent,
     try_lock_file,
     unlock_file,
     unlock_task_files,
+    update_launch_agent_status,
+    update_launch_session_status,
     validate_agent_name,
 )
-from swarm.models import AgentStatus, EventType, TaskStatus
+from swarm.models import AgentStatus, EventType, LaunchRegistrationStatus, LaunchSessionStatus, TaskStatus
 
 
 class TestDatabaseInit:
     """Тесты инициализации БД."""
-    
+
     def test_init_creates_db_file(self, tmp_path):
         """Проверяет создание файла БД."""
         db_path = init_database(tmp_path)
-        
+
         assert db_path.exists()
         assert db_path.name == DB_FILENAME
-    
+
     def test_init_creates_wal_mode(self, tmp_path):
         """Проверяет включение WAL-режима."""
         import sqlite3
-        
+
         db_path = init_database(tmp_path)
-        
+
         conn = sqlite3.connect(str(db_path))
         result = conn.execute("PRAGMA journal_mode").fetchone()
         conn.close()
-        
+
         assert result[0] == "wal"
-    
+
     def test_find_db_path(self, temp_db):
         """Проверяет поиск БД."""
         found = find_db_path()
-        
+
         assert found is not None
         assert found.exists()
 
 
 class TestAgents:
     """Тесты операций с агентами."""
-    
+
     def test_register_agent(self, temp_db):
         """Проверяет регистрацию агента."""
         agent = register_agent(
@@ -77,35 +86,35 @@ class TestAgents:
             name="alice",
             role="architect",
         )
-        
+
         assert agent.agent_id is not None
         assert agent.session_token == "unique-token-001"
         assert agent.cli_type == "claude"
         assert agent.name == "alice"
         assert agent.role == "architect"
         assert agent.status == AgentStatus.IDLE
-    
+
     def test_get_agent_by_session(self, sample_agent):
         """Проверяет получение агента по токену."""
         found = get_agent_by_session("test-token-123")
-        
+
         assert found is not None
         assert found.agent_id == sample_agent.agent_id
         assert found.name == sample_agent.name
-    
+
     def test_get_agent_by_invalid_session(self, temp_db):
         """Проверяет поведение при неверном токене."""
         found = get_agent_by_session("nonexistent-token")
-        
+
         assert found is None
-    
+
     def test_get_all_agents(self, temp_db):
         """Проверяет получение списка агентов."""
         register_agent("token-1", "claude", "agent1", "developer")
         register_agent("token-2", "codex", "agent2", "tester")
-        
+
         agents = get_all_agents()
-        
+
         assert len(agents) == 2
         assert agents[0].name == "agent1"
         assert agents[1].name == "agent2"
@@ -113,7 +122,7 @@ class TestAgents:
 
 class TestTasks:
     """Тесты операций с задачами."""
-    
+
     def test_create_task(self, temp_db):
         """Проверяет создание задачи."""
         task = create_task(
@@ -121,49 +130,49 @@ class TestTasks:
             priority=1,
             target_role="developer",
         )
-        
+
         assert task.task_id is not None
         assert task.description == "Реализовать API"
         assert task.priority == 1
         assert task.target_role == "developer"
         assert task.status == TaskStatus.PENDING
-    
+
     def test_get_task(self, sample_task):
         """Проверяет получение задачи по ID."""
         found = get_task(sample_task.task_id)
-        
+
         assert found is not None
         assert found.task_id == sample_task.task_id
         assert found.description == sample_task.description
-    
+
     def test_get_all_tasks(self, temp_db):
         """Проверяет получение списка задач."""
         create_task("Задача 1", priority=3)
         create_task("Задача 2", priority=1)
         create_task("Задача 3", priority=2)
-        
+
         tasks = get_all_tasks()
-        
+
         assert len(tasks) == 3
         # Проверяем сортировку по приоритету
         assert tasks[0].priority == 1
         assert tasks[1].priority == 2
         assert tasks[2].priority == 3
-    
+
     def test_get_tasks_by_status(self, temp_db):
         """Проверяет фильтрацию по статусу."""
         create_task("Задача pending")
-        
+
         pending = get_all_tasks(status=TaskStatus.PENDING)
         done = get_all_tasks(status=TaskStatus.DONE)
-        
+
         assert len(pending) == 1
         assert len(done) == 0
 
 
 class TestFileLocks:
     """Тесты блокировки файлов."""
-    
+
     def test_lock_file(self, sample_agent, sample_task):
         """Проверяет захват блокировки."""
         success = try_lock_file(
@@ -171,48 +180,48 @@ class TestFileLocks:
             task_id=sample_task.task_id,
             file_path="src/main.py",
         )
-        
+
         assert success is True
-        
+
         lock = get_file_lock("src/main.py")
         assert lock is not None
         assert lock.locked_by == sample_agent.agent_id
-    
+
     def test_lock_already_locked_file(self, temp_db):
         """Проверяет блокировку уже заблокированного файла."""
         agent1 = register_agent("token-1", "claude", "agent1", "developer")
         agent2 = register_agent("token-2", "claude", "agent2", "developer")
-        
+
         task1 = create_task("Задача 1")
         task2 = create_task("Задача 2")
-        
+
         # Первый агент блокирует
         success1 = try_lock_file(agent1.agent_id, task1.task_id, "file.py")
         assert success1 is True
-        
+
         # Второй агент пытается заблокировать тот же файл
         success2 = try_lock_file(agent2.agent_id, task2.task_id, "file.py")
         assert success2 is False
-    
+
     def test_unlock_file(self, sample_agent, sample_task):
         """Проверяет снятие блокировки."""
         try_lock_file(sample_agent.agent_id, sample_task.task_id, "test.py")
-        
+
         result = unlock_file("test.py", agent_id=sample_agent.agent_id)
-        
+
         assert result is True
         assert get_file_lock("test.py") is None
-    
+
     def test_force_unlock(self, temp_db):
         """Проверяет принудительное снятие блокировки."""
         agent = register_agent("token", "claude", "agent", "developer")
         task = create_task("Задача")
-        
+
         try_lock_file(agent.agent_id, task.task_id, "locked.py")
-        
+
         # Принудительное снятие без указания агента
         result = unlock_file("locked.py", force=True)
-        
+
         assert result is True
         assert get_file_lock("locked.py") is None
 
@@ -703,3 +712,153 @@ class TestEventLogging:
         assert EventType.TASK_ASSIGNED.value == "task_assigned"
         assert EventType.TASK_FORCE_CLOSED.value == "task_force_closed"
         assert EventType.AGENT_CLEANUP.value == "agent_cleanup"
+
+
+class TestLaunchSessions:
+    """Тесты launch sessions для терминальной оркестрации."""
+
+    def test_create_and_get_launch_session(self, temp_db):
+        """Создание launch session и чтение из БД."""
+        created = create_launch_session(
+            session_id="ls-test-1",
+            working_directory=str(Path.cwd()),
+            approval_mode="yolo",
+            layout_mode="mixed",
+            requested_agent_count=2,
+            created_by="orchestrator",
+            status=LaunchSessionStatus.PLANNED,
+        )
+
+        assert created.session_id == "ls-test-1"
+        assert created.status == LaunchSessionStatus.PLANNED
+
+        found = get_launch_session("ls-test-1")
+        assert found is not None
+        assert found.layout_mode == "mixed"
+
+    def test_add_launch_session_agent_and_status_update(self, temp_db):
+        """Добавление агента в launch session и обновление статуса."""
+        create_launch_session(
+            session_id="ls-test-2",
+            working_directory=str(Path.cwd()),
+            approval_mode="safe",
+            layout_mode="single",
+            requested_agent_count=1,
+        )
+        add_launch_session_agent(
+            session_id="ls-test-2",
+            cli_type="claude",
+            agent_name="launch-dev",
+            agent_role="developer",
+            window_index=1,
+            pane_index=1,
+            launcher_profile="claude-safe",
+            bootstrap_prompt="test prompt",
+            registration_status=LaunchRegistrationStatus.PLANNED,
+        )
+
+        updated = update_launch_agent_status(
+            "ls-test-2",
+            "launch-dev",
+            LaunchRegistrationStatus.LAUNCHED,
+            terminal_pid=4321,
+        )
+        assert updated is True
+
+        agents = get_launch_session_agents("ls-test-2")
+        assert len(agents) == 1
+        assert agents[0].registration_status == LaunchRegistrationStatus.LAUNCHED
+        assert agents[0].terminal_pid == 4321
+
+    def test_reconcile_marks_registered_agents(self, temp_db):
+        """reconcile связывает launch-агентов с фактически зарегистрированными."""
+        create_launch_session(
+            session_id="ls-test-3",
+            working_directory=str(Path.cwd()),
+            approval_mode="safe",
+            layout_mode="single",
+            requested_agent_count=1,
+            status=LaunchSessionStatus.LAUNCHED,
+        )
+        add_launch_session_agent(
+            session_id="ls-test-3",
+            cli_type="claude",
+            agent_name="registered-agent",
+            agent_role="developer",
+            window_index=1,
+            pane_index=1,
+            launcher_profile="claude-safe",
+            bootstrap_prompt="prompt",
+            registration_status=LaunchRegistrationStatus.LAUNCHED,
+        )
+
+        registered = register_agent("tok-ls-3", "claude", "registered-agent", "developer")
+        session, launch_agents = reconcile_launch_session("ls-test-3")
+
+        assert session is not None
+        assert session.status == LaunchSessionStatus.REGISTERED
+        assert len(launch_agents) == 1
+        assert launch_agents[0].registration_status == LaunchRegistrationStatus.REGISTERED
+        assert launch_agents[0].registered_agent_id == registered.agent_id
+
+    def test_active_launch_agent_names(self, temp_db):
+        """В активные имена попадают только незавершённые launch sessions."""
+        create_launch_session(
+            session_id="ls-active",
+            working_directory=str(Path.cwd()),
+            approval_mode="safe",
+            layout_mode="single",
+            requested_agent_count=1,
+            status=LaunchSessionStatus.APPROVED,
+        )
+        add_launch_session_agent(
+            session_id="ls-active",
+            cli_type="codex",
+            agent_name="busy-name",
+            agent_role="developer",
+            window_index=1,
+            pane_index=1,
+            launcher_profile="codex-safe",
+            bootstrap_prompt="prompt",
+        )
+
+        create_launch_session(
+            session_id="ls-stopped",
+            working_directory=str(Path.cwd()),
+            approval_mode="safe",
+            layout_mode="single",
+            requested_agent_count=1,
+            status=LaunchSessionStatus.STOPPED,
+        )
+        add_launch_session_agent(
+            session_id="ls-stopped",
+            cli_type="codex",
+            agent_name="free-name",
+            agent_role="developer",
+            window_index=1,
+            pane_index=1,
+            launcher_profile="codex-safe",
+            bootstrap_prompt="prompt",
+        )
+
+        names = get_active_launch_agent_names()
+        assert "busy-name" in names
+        assert "free-name" not in names
+
+    def test_update_launch_session_status_and_list(self, temp_db):
+        """Обновление статуса сессии отражается в выборке."""
+        create_launch_session(
+            session_id="ls-test-4",
+            working_directory=str(Path.cwd()),
+            approval_mode="yolo",
+            layout_mode="mixed",
+            requested_agent_count=3,
+            status=LaunchSessionStatus.PLANNED,
+        )
+
+        changed = update_launch_session_status("ls-test-4", LaunchSessionStatus.APPROVED)
+        assert changed is True
+
+        sessions = get_launch_sessions(status=LaunchSessionStatus.APPROVED)
+        assert len(sessions) == 1
+        assert sessions[0].session_id == "ls-test-4"
