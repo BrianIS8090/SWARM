@@ -9,6 +9,8 @@ from pathlib import Path
 from ..db import validate_agent_name
 from ..utils import CLI_TYPES
 
+SPECS_DIR = Path(".swarm") / "specs"
+
 ALLOWED_LAYOUTS = {"single", "mixed", "multi-window"}
 ALLOWED_APPROVAL_MODES = {"safe", "yolo"}
 ALLOWED_ROLES = {"architect", "developer", "tester", "devops"}

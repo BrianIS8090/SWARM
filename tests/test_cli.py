@@ -191,8 +191,8 @@ class TestAgentCommands:
 
         assert result.exit_code == 0
         assert "Зарегистрирован как агент #1" in result.stdout
-        # Теперь файл сессии именуется по имени агента
-        assert (tmp_path / ".swarm_session_test-agent").exists()
+        # Файл сессии в .swarm/sessions/
+        assert (tmp_path / ".swarm" / "sessions" / ".swarm_session_test-agent").exists()
 
     def test_agents_empty(self, tmp_path, monkeypatch):
         """Проверяет пустой список агентов."""
@@ -665,7 +665,7 @@ class TestTerminalCommands:
 
         assert result.exit_code == 0
         # Проверяем, что создан excluded spec
-        excluded_path = tmp_path / "launch-spec-excluded.json"
+        excluded_path = tmp_path / ".swarm" / "specs" / "launch-spec-excluded.json"
         assert excluded_path.exists()
         excluded_data = json.loads(excluded_path.read_text(encoding="utf-8"))
         assert len(excluded_data["agents"]) == 1

@@ -41,6 +41,9 @@ DB_FILENAME = "swarm.db"
 # Имя файла сессии агента
 SESSION_FILENAME = ".swarm_session"
 
+# Директория сессий внутри .swarm/
+SESSIONS_DIR = Path(".swarm") / "sessions"
+
 # Регулярное выражение для валидации имени агента (m-9)
 AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 
@@ -965,7 +968,9 @@ def save_session_token(token: str, agent_name: str, directory: Path | None = Non
     os.environ["SWARM_AGENT"] = agent_name
 
     target_dir = directory or Path.cwd()
-    session_path = target_dir / f".swarm_session_{agent_name}"
+    sessions_dir = target_dir / SESSIONS_DIR
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    session_path = sessions_dir / f".swarm_session_{agent_name}"
     session_path.write_text(token)
     with contextlib.suppress(OSError):
         os.chmod(session_path, 0o600)
@@ -983,15 +988,25 @@ def load_session_token(directory: Path | None = None) -> str | None:
     agent_name = os.environ.get("SWARM_AGENT")
     if not agent_name:
         target_dir = directory or Path.cwd()
+        # Проверяем .swarm/sessions/ (новый путь)
+        new_session_path = target_dir / SESSIONS_DIR / SESSION_FILENAME
+        if new_session_path.exists():
+            return new_session_path.read_text().strip()
+        # Fallback на корень (legacy)
         old_session_path = target_dir / SESSION_FILENAME
         if old_session_path.exists():
             return old_session_path.read_text().strip()
         return None
 
     target_dir = directory or Path.cwd()
-    session_path = target_dir / f".swarm_session_{agent_name}"
+    # Проверяем .swarm/sessions/ (новый путь)
+    session_path = target_dir / SESSIONS_DIR / f".swarm_session_{agent_name}"
     if session_path.exists():
         return session_path.read_text().strip()
+    # Fallback на корень (legacy)
+    legacy_path = target_dir / f".swarm_session_{agent_name}"
+    if legacy_path.exists():
+        return legacy_path.read_text().strip()
     return None
 
 

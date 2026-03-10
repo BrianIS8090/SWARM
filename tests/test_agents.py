@@ -97,13 +97,16 @@ class TestSessionManagement:
         if "SWARM_AGENT" in os.environ:
             del os.environ["SWARM_AGENT"]
         
-        # Удаляем файл сессии если есть
-        session_path = Path.cwd() / ".swarm_session"
-        if session_path.exists():
-            session_path.unlink()
-        
+        # Удаляем файлы сессии если есть (новый и legacy пути)
+        new_session_path = Path.cwd() / ".swarm" / "sessions" / ".swarm_session"
+        if new_session_path.exists():
+            new_session_path.unlink()
+        legacy_session_path = Path.cwd() / ".swarm_session"
+        if legacy_session_path.exists():
+            legacy_session_path.unlink()
+
         loaded = load_session_token()
-        
+
         assert loaded is None
     
     def test_get_current_agent(self, temp_db):
@@ -128,11 +131,14 @@ class TestSessionManagement:
         if "SWARM_AGENT" in os.environ:
             del os.environ["SWARM_AGENT"]
         
-        # Удаляем файл сессии
-        session_path = Path.cwd() / ".swarm_session"
-        if session_path.exists():
-            session_path.unlink()
-        
+        # Удаляем файлы сессии (новый и legacy пути)
+        new_session_path = Path.cwd() / ".swarm" / "sessions" / ".swarm_session"
+        if new_session_path.exists():
+            new_session_path.unlink()
+        legacy_session_path = Path.cwd() / ".swarm_session"
+        if legacy_session_path.exists():
+            legacy_session_path.unlink()
+
         current = get_current_agent()
-        
+
         assert current is None

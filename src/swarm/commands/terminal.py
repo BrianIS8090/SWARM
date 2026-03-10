@@ -30,7 +30,7 @@ from ..terminal.launcher_registry import launcher_profile
 from ..terminal.layouts import launch_layout
 from ..terminal.preflight import run_preflight
 from ..terminal.prompt_builder import build_bootstrap_prompt
-from ..terminal.spec import LaunchSpec, LayoutSpec, load_launch_spec, save_launch_spec
+from ..terminal.spec import SPECS_DIR, LaunchSpec, LayoutSpec, load_launch_spec, save_launch_spec
 from ..utils import check_db as _check_db
 
 console = Console()
@@ -245,7 +245,9 @@ def _print_excluded_command(spec, excluded_agents, original_spec_path: Path) -> 
         layout=LayoutSpec(mode=_auto_layout_mode(len(excluded_agents)), max_panes_per_window=spec.layout.max_panes_per_window),
         agents=excluded_agents,
     )
-    excluded_path = original_spec_path.parent / f"{original_spec_path.stem}-excluded{original_spec_path.suffix}"
+    specs_dir = Path(spec.working_directory) / SPECS_DIR
+    specs_dir.mkdir(parents=True, exist_ok=True)
+    excluded_path = specs_dir / f"{original_spec_path.stem}-excluded{original_spec_path.suffix}"
     save_launch_spec(excluded_spec, excluded_path)
 
     cli_type = excluded_agents[0].cli
@@ -308,8 +310,10 @@ def stop_command(
         console.print(f"[red]✗ Launch session не найдена: {session_id}[/red]")
         raise typer.Exit(1)
 
-    # Читаем PID-файлы, записанные launcher-скриптами (.swarm_pids/{session}_{agent}.pid)
-    pid_dir = Path(session.working_directory) / ".swarm_pids"
+    # Читаем PID-файлы, записанные launcher-скриптами (.swarm/pids/{session}_{agent}.pid)
+    pid_dir = Path(session.working_directory) / ".swarm" / "pids"
+    if not pid_dir.exists():
+        pid_dir = Path(session.working_directory) / ".swarm_pids"  # legacy fallback
     killed_count = 0
     if pid_dir.exists():
         for pid_file in pid_dir.glob(f"{session_id}_*.pid"):

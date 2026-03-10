@@ -46,6 +46,8 @@ htmlcov/
 swarm.db
 swarm.db-wal
 swarm.db-shm
+.swarm/
+# Legacy
 .swarm_session
 .swarm_session_*
 .swarm_pids/

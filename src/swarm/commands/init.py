@@ -105,7 +105,7 @@ swarm task list
 
 После создания задач — запуск агентов.
 
-**Шаг 1.** Создай файл `launch-spec.json` в корне проекта (рядом с `swarm.db`). Включи в него ВСЕХ агентов — и своего CLI, и чужих.
+**Шаг 1.** Создай файл `.swarm/specs/launch-spec.json` в проекте. Включи в него ВСЕХ агентов — и своего CLI, и чужих.
 
 Формат launch spec JSON:
 
@@ -163,13 +163,13 @@ swarm task list
 **Шаг 2.** Запусти команду с `--exclude-cli` для своего типа CLI:
 
 ```bash
-swarm terminal launch --spec launch-spec.json --exclude-cli <свой-cli-тип>
+swarm terminal launch --spec .swarm/specs/launch-spec.json --exclude-cli <свой-cli-тип>
 ```
 
 Например, если ты — оркестратор claude:
 
 ```bash
-swarm terminal launch --spec launch-spec.json --exclude-cli claude
+swarm terminal launch --spec .swarm/specs/launch-spec.json --exclude-cli claude
 ```
 
 Что происходит:
@@ -285,7 +285,7 @@ swarm task add --desc "Добавить тесты" --priority 2 --role tester
 5. **Запусти новых агентов:**
 
 ```bash
-swarm terminal launch --spec launch-spec-iter2.json --exclude-cli <свой-cli-тип>
+swarm terminal launch --spec .swarm/specs/launch-spec-iter2.json --exclude-cli <свой-cli-тип>
 ```
 
 6. **Повторяй** фазы 4-6 до тех пор, пока результат не будет удовлетворительным.
@@ -473,6 +473,10 @@ def init_command(
     except Exception as e:
         console.print(f"[red]✗ Ошибка создания базы данных: {e}[/red]")
         raise typer.Exit(1)
+
+    # Создаём структуру .swarm/ с подпапками
+    for sub in ["sessions", "specs", "pids"]:
+        (current_dir / ".swarm" / sub).mkdir(parents=True, exist_ok=True)
 
     # Создаём структуру папок для каждого типа агента
     skills_created = []
