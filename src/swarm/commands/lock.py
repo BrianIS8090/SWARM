@@ -15,7 +15,6 @@ from ..db import (
     get_agent_lock,
     get_all_agents,
     get_all_locks,
-    get_current_agent,
     get_file_lock,
     log_event,
     try_lock_file,
@@ -122,6 +121,7 @@ def unlock_command(
     file_path: str = typer.Option(None, "--file", "-f", help="Путь к файлу для разблокировки"),
     force: bool = typer.Option(False, "--force", help="Принудительное снятие (для Лидера)"),
     all_files: bool = typer.Option(False, "--all", "-a", help="Снять все блокировки"),
+    agent_name: str | None = typer.Option(None, "--agent", help="Имя агента (если не указан — из сессии)"),
 ):
     """
     Снимает блокировку с файла.
@@ -132,12 +132,6 @@ def unlock_command(
     _check_db()
 
     if all_files and force:
-        # Требуется активная сессия — анонимный процесс без сессии не должен снимать все блокировки
-        if get_current_agent() is None:
-            console.print("[red]✗ Для --force --all требуется активная сессия агента.[/red]")
-            console.print("Зарегистрируйтесь через 'swarm join' и используйте --agent <имя>.")
-            raise typer.Exit(1)
-
         # Снимаем все блокировки
         locks = get_all_locks()
         if not locks:
@@ -162,12 +156,6 @@ def unlock_command(
         raise typer.Exit(1)
 
     if force:
-        # Требуется активная сессия для принудительного снятия блокировки
-        if get_current_agent() is None:
-            console.print("[red]✗ Для --force требуется активная сессия агента.[/red]")
-            console.print("Зарегистрируйтесь через 'swarm join' и используйте --agent <имя>.")
-            raise typer.Exit(1)
-
         # Принудительное снятие
         existing = get_file_lock(file_path)
         if existing is None:
@@ -184,7 +172,7 @@ def unlock_command(
         console.print(f"[green]✓ Принудительно разблокирован: {file_path}[/green]")
     else:
         # Обычное снятие — только своих блокировок
-        agent = _check_agent()
+        agent = _check_agent(agent_name)
 
         if unlock_file(file_path, agent_id=agent.agent_id):
             log_event(

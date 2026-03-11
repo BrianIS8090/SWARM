@@ -105,6 +105,24 @@ class TestLockUnlockCLIEdgeCases:
     # Должен быть отказ (exit_code=1) — файл заблокирован другим агентом
     assert result.exit_code == 1
 
+  def test_unlock_without_agent_and_env_fails(self, tmp_path, monkeypatch):
+    """unlock --file X без --agent и без env vars выдаёт ошибку с подсказкой."""
+    monkeypatch.chdir(tmp_path)
+    runner.invoke(app, ["init"])
+    runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+    runner.invoke(app, ["join", "--cli", "claude", "--name", "locker", "--role", "developer"])
+    runner.invoke(app, ["next"])
+    runner.invoke(app, ["lock", "shared.py"])
+
+    # Очищаем env vars — имитируем bash-окружение без сессии
+    monkeypatch.delenv("SWARM_AGENT", raising=False)
+    monkeypatch.delenv("SWARM_SESSION", raising=False)
+
+    result = runner.invoke(app, ["unlock", "--file", "shared.py"])
+
+    assert result.exit_code == 1
+    assert "--agent" in result.stdout
+
   def test_lock_idempotent_via_cli(self, tmp_path, monkeypatch):
     """Повторная блокировка того же файла через CLI — идемпотентна."""
     monkeypatch.chdir(tmp_path)

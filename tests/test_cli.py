@@ -316,16 +316,23 @@ class TestPermissions:
         assert result.exit_code == 1
         assert "не может изменять очередь задач" in result.stdout
 
-    def test_anonymous_cannot_force_unlock(self, tmp_path, monkeypatch):
-        """Анонимный процесс без сессии не должен использовать --force."""
+    def test_anonymous_can_force_unlock(self, tmp_path, monkeypatch):
+        """Лидер/оркестратор может использовать --force без регистрации."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "holder", "--role", "developer"])
+        runner.invoke(app, ["next"])
+        runner.invoke(app, ["lock", "file.py"])
 
-        # Без регистрации агента — анонимный процесс
+        # Очищаем сессию — становимся Лидером
+        monkeypatch.delenv("SWARM_AGENT", raising=False)
+        monkeypatch.delenv("SWARM_SESSION", raising=False)
+
         result = runner.invoke(app, ["unlock", "--force", "--file", "file.py"])
 
-        assert result.exit_code == 1
-        assert "требуется активная сессия" in result.stdout
+        assert result.exit_code == 0
+        assert "разблокирован" in result.stdout.lower()
 
     def test_agent_can_force_unlock_own_file(self, tmp_path, monkeypatch):
         """Зарегистрированный агент может использовать --force для разблокировки."""
@@ -525,15 +532,37 @@ class TestLockUnlockCommands:
         assert result.exit_code == 0
         assert "Снято блокировок" in result.stdout
 
-    def test_anonymous_cannot_unlock_all_force(self, tmp_path, monkeypatch):
-        """Анонимный процесс не может использовать --all --force."""
+    def test_anonymous_can_unlock_all_force(self, tmp_path, monkeypatch):
+        """Лидер/оркестратор может использовать --all --force без регистрации."""
         monkeypatch.chdir(tmp_path)
         runner.invoke(app, ["init"])
 
         result = runner.invoke(app, ["unlock", "--all", "--force"])
 
-        assert result.exit_code == 1
-        assert "требуется активная сессия" in result.stdout
+        assert result.exit_code == 0
+        assert "Нет активных блокировок" in result.stdout
+
+
+class TestUnlockWithAgentFlag:
+    """Тесты unlock с флагом --agent."""
+
+    def test_unlock_with_agent_flag(self, tmp_path, monkeypatch):
+        """unlock --file X --agent имя снимает блокировку без env vars."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "unlocker", "--role", "developer"])
+        runner.invoke(app, ["next", "--agent", "unlocker"])
+        runner.invoke(app, ["lock", "test.py", "--agent", "unlocker"])
+
+        # Очищаем env vars — имитируем bash-окружение
+        monkeypatch.delenv("SWARM_AGENT", raising=False)
+        monkeypatch.delenv("SWARM_SESSION", raising=False)
+
+        result = runner.invoke(app, ["unlock", "--file", "test.py", "--agent", "unlocker"])
+
+        assert result.exit_code == 0
+        assert "разблокирован" in result.stdout.lower()
 
 
 class TestLogsCommand:
