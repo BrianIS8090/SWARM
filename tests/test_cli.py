@@ -437,6 +437,48 @@ class TestTaskAssignCommand:
         assert "не найдена" in result.stdout
 
 
+class TestTaskResetCommand:
+    """Тесты команды task reset."""
+
+    def test_reset_task(self, tmp_path, monkeypatch):
+        """Сброс задачи через CLI."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Для сброса", "--priority", "1"])
+        # Имитируем in_progress: join + next
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "worker", "--role", "developer"])
+        runner.invoke(app, ["next"])
+        # Убираем сессию агента чтобы стать Лидером
+        monkeypatch.delenv("SWARM_AGENT", raising=False)
+
+        result = runner.invoke(app, ["task", "reset", "1"])
+
+        assert result.exit_code == 0
+        assert "сброшена в pending" in result.stdout
+
+    def test_reset_nonexistent_task(self, tmp_path, monkeypatch):
+        """Сброс несуществующей задачи даёт ошибку."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        result = runner.invoke(app, ["task", "reset", "999"])
+
+        assert result.exit_code == 1
+        assert "не найдена" in result.stdout
+
+    def test_agent_cannot_reset_task(self, tmp_path, monkeypatch):
+        """Агент не может сбрасывать задачи."""
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        runner.invoke(app, ["task", "add", "--desc", "Задача", "--priority", "1"])
+        runner.invoke(app, ["join", "--cli", "claude", "--name", "agent", "--role", "developer"])
+
+        result = runner.invoke(app, ["task", "reset", "1"])
+
+        assert result.exit_code == 1
+        assert "не может изменять очередь задач" in result.stdout
+
+
 class TestLockUnlockCommands:
     """Тесты команд lock и unlock."""
 

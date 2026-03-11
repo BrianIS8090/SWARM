@@ -66,9 +66,9 @@ def _build_mixed_window_args(
     if idx == 2:
       args.extend(["split-pane", "-V"])
     elif idx == 3:
-      args.extend(["move-focus", "left", ";", "split-pane", "-H"])
+      args.extend(["move-focus", "--direction", "left", ";", "split-pane", "-H"])
     elif idx == 4:
-      args.extend(["move-focus", "right", ";", "split-pane", "-H"])
+      args.extend(["move-focus", "--direction", "right", ";", "split-pane", "-H"])
     else:
       args.extend(["split-pane", "-V"])
     args.extend(

@@ -10,6 +10,7 @@ import pytest
 
 from swarm.db import (
     DB_FILENAME,
+    SESSIONS_DIR,
     add_launch_session_agent,
     assign_task_to_agent,
     claim_next_task,
@@ -32,9 +33,11 @@ from swarm.db import (
     get_recent_events,
     get_task,
     init_database,
+    load_session_token,
     log_event,
     reconcile_launch_session,
     register_agent,
+    save_session_token,
     try_lock_file,
     unlock_file,
     unlock_task_files,
@@ -522,15 +525,39 @@ class TestDependencyCycle:
         t3 = create_task("Третья", depends_on=t2.task_id)
         assert t3.depends_on == t2.task_id
 
-    def test_self_dependency_detected(self, temp_db):
-        """Задача не может зависеть от себя (цикл длины 1)."""
+    def test_linear_dependency_is_valid(self, temp_db):
+        """Линейная зависимость t2 -> t1 допустима (не цикл)."""
         t1 = create_task("Задача")
-        # Создаём цикл: t2 зависит от t1, но t1 зависит от самого себя
-        # Обход: depends_on=t1 при создании t2 не создаёт цикл
-        # Но прямой цикл проверяется в _has_dependency_cycle
-        # Тестируем косвенно: depends_on указывает на несуществующую задачу = нет цикла
         t2 = create_task("Зависимая", depends_on=t1.task_id)
         assert t2 is not None
+        assert t2.depends_on == t1.task_id
+
+    def test_self_dependency_detected(self, temp_db):
+        """Задача не может зависеть от самой себя (цикл длины 1).
+
+        Прямая самозависимость: создаём задачу, затем пытаемся
+        вручную установить depends_on на собственный task_id через SQL,
+        и проверяем через _has_dependency_cycle.
+        """
+        import sqlite3 as _sqlite3
+
+        from swarm.db import _has_dependency_cycle, get_db_path
+
+        t1 = create_task("Задача-одиночка")
+
+        # Устанавливаем depends_on = task_id задачи на саму себя
+        db_path = get_db_path()
+        conn = _sqlite3.connect(str(db_path))
+        conn.execute(
+            "UPDATE tasks SET depends_on = ? WHERE task_id = ?",
+            (t1.task_id, t1.task_id),
+        )
+        conn.commit()
+
+        # Функция обнаружения цикла должна обнаружить самозависимость
+        conn.row_factory = _sqlite3.Row
+        assert _has_dependency_cycle(conn, t1.task_id) is True
+        conn.close()
 
 
 class TestConcurrency:
@@ -862,3 +889,182 @@ class TestLaunchSessions:
         sessions = get_launch_sessions(status=LaunchSessionStatus.APPROVED)
         assert len(sessions) == 1
         assert sessions[0].session_id == "ls-test-4"
+
+
+class TestCleanupForceAll:
+    """Тесты КРИТ-1: cleanup_dead_agents(force_all=True) освобождает задачи и блокировки."""
+
+    def test_force_all_releases_tasks(self, temp_db):
+        """При force_all=True задачи in_progress переходят в failed."""
+        agent = register_agent("tok-fa1", "claude", "force-agent", "developer")
+        task = create_task("Задача для force_all")
+
+        # Агент захватывает задачу
+        claim_next_task(agent)
+        assert get_task(task.task_id).status == TaskStatus.IN_PROGRESS
+
+        # Удаляем всех агентов принудительно
+        removed = cleanup_dead_agents(force_all=True)
+        assert removed == 1
+
+        # Задача должна стать failed с assigned_to = NULL
+        updated_task = get_task(task.task_id)
+        assert updated_task.status == TaskStatus.FAILED
+        assert updated_task.assigned_to is None
+
+    def test_force_all_deletes_locks(self, temp_db):
+        """При force_all=True все блокировки файлов удаляются."""
+        agent = register_agent("tok-fa2", "claude", "lock-agent", "developer")
+        task = create_task("Задача с блокировкой")
+
+        # Агент захватывает задачу и блокирует файл
+        claim_next_task(agent)
+        try_lock_file(agent.agent_id, task.task_id, "src/locked.py")
+        assert get_file_lock("src/locked.py") is not None
+
+        # Удаляем всех принудительно
+        cleanup_dead_agents(force_all=True)
+
+        # Блокировка должна быть снята
+        assert get_file_lock("src/locked.py") is None
+        assert get_all_locks() == []
+
+    def test_force_all_removes_all_agents(self, temp_db):
+        """При force_all=True все агенты удаляются."""
+        register_agent("tok-fa3", "claude", "agent-a", "developer")
+        register_agent("tok-fa4", "codex", "agent-b", "tester")
+
+        removed = cleanup_dead_agents(force_all=True)
+        assert removed == 2
+        assert get_all_agents() == []
+
+    def test_force_all_leaves_pending_tasks_unchanged(self, temp_db):
+        """При force_all=True задачи в pending не затрагиваются."""
+        register_agent("tok-fa5", "claude", "pending-agent", "developer")
+        task = create_task("Задача в ожидании")
+
+        cleanup_dead_agents(force_all=True)
+
+        # Задача pending не должна стать failed
+        updated = get_task(task.task_id)
+        assert updated.status == TaskStatus.PENDING
+
+
+class TestCreateTaskTransaction:
+    """Тесты КРИТ-4: create_task с BEGIN IMMEDIATE транзакцией."""
+
+    def test_create_task_with_dependency(self, temp_db):
+        """Создание задачи с зависимостью корректно работает в транзакции."""
+        t1 = create_task("Первая задача")
+        t2 = create_task("Вторая задача", depends_on=t1.task_id)
+
+        assert t2.depends_on == t1.task_id
+        assert t2.status == TaskStatus.PENDING
+
+    def test_create_task_with_long_chain(self, temp_db):
+        """Цепочка зависимостей из нескольких задач создаётся корректно."""
+        t1 = create_task("Шаг 1")
+        t2 = create_task("Шаг 2", depends_on=t1.task_id)
+        t3 = create_task("Шаг 3", depends_on=t2.task_id)
+
+        assert t3.depends_on == t2.task_id
+        assert get_task(t3.task_id) is not None
+
+    def test_create_task_without_dependency(self, temp_db):
+        """Создание задачи без зависимости работает в транзакции."""
+        task = create_task("Простая задача", priority=1)
+
+        assert task.task_id is not None
+        assert task.depends_on is None
+
+
+class TestForceCloseLogging:
+    """Тесты КРИТ-5: force_close_task логирует ровно одно событие."""
+
+    def test_force_close_logs_single_event(self, temp_db):
+        """force_close_task создаёт ровно одну запись TASK_FORCE_CLOSED в логе."""
+        task = create_task("Задача для лога")
+
+        force_close_task(task.task_id, reason="Тест логирования")
+
+        events = get_recent_events(limit=50)
+        force_closed_events = [e for e in events if e.event == EventType.TASK_FORCE_CLOSED]
+        # Должно быть ровно одно событие TASK_FORCE_CLOSED
+        assert len(force_closed_events) == 1
+        assert force_closed_events[0].task_id == task.task_id
+        assert "Тест логирования" in force_closed_events[0].message
+
+    def test_force_close_does_not_log_task_done(self, temp_db):
+        """force_close_task НЕ создаёт запись TASK_DONE — только TASK_FORCE_CLOSED."""
+        task = create_task("Задача для проверки типа события")
+
+        force_close_task(task.task_id, reason="Причина")
+
+        events = get_recent_events(limit=50)
+        done_events = [e for e in events if e.event == EventType.TASK_DONE]
+        # Событий TASK_DONE быть не должно
+        assert len(done_events) == 0
+
+    def test_reset_task_logs_single_event(self, temp_db):
+        """reset_task создаёт ровно одну запись TASK_RESET в логе."""
+        from swarm.db import reset_task
+
+        agent = register_agent("tok-rl1", "claude", "reset-logger", "developer")
+        task = create_task("Задача для сброса")
+
+        # Захватываем задачу
+        claim_next_task(agent)
+
+        # Сбрасываем
+        reset_task(task.task_id)
+
+        events = get_recent_events(limit=50)
+        reset_events = [e for e in events if e.event == EventType.TASK_RESET]
+        assert len(reset_events) == 1
+        assert reset_events[0].task_id == task.task_id
+
+
+class TestSessionTokenEncoding:
+    """Тесты ВАЖ-4: save_session_token и load_session_token с utf-8."""
+
+    def test_save_and_load_ascii_token(self, temp_db):
+        """Сохранение и загрузка ASCII-токена."""
+        import os
+
+        token = "abc-123-token"
+        save_session_token(token, "test-enc-agent", directory=Path.cwd())
+
+        # Загружаем через load_session_token
+        loaded = load_session_token(directory=Path.cwd())
+        assert loaded == token
+
+        # Очищаем переменные окружения
+        os.environ.pop("SWARM_AGENT", None)
+
+    def test_save_and_load_unicode_token(self, temp_db):
+        """Сохранение и загрузка токена с unicode-символами."""
+        import os
+
+        token = "токен-сессии-юникод-12345"
+        save_session_token(token, "uni-agent", directory=Path.cwd())
+
+        loaded = load_session_token(directory=Path.cwd())
+        assert loaded == token
+
+        os.environ.pop("SWARM_AGENT", None)
+
+    def test_session_file_is_utf8(self, temp_db):
+        """Файл сессии записывается в UTF-8 кодировке."""
+        import os
+
+        token = "тест-utf8-кодировка"
+        save_session_token(token, "utf8-agent", directory=Path.cwd())
+
+        # Читаем файл напрямую в бинарном режиме
+        session_path = Path.cwd() / SESSIONS_DIR / ".swarm_session_utf8-agent"
+        raw = session_path.read_bytes()
+        # Проверяем что содержимое — валидный UTF-8
+        decoded = raw.decode("utf-8")
+        assert decoded == token
+
+        os.environ.pop("SWARM_AGENT", None)

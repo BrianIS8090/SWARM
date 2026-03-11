@@ -9,7 +9,9 @@ from swarm.db import (
     create_task,
     get_agent_by_session,
     get_file_lock,
+    get_task,
     register_agent,
+    reset_task,
     try_lock_file,
 )
 from swarm.models import AgentStatus, TaskStatus
@@ -168,5 +170,77 @@ class TestTaskCompletion:
     def test_complete_without_task_fails(self, sample_agent):
         """Проверяет ошибку при завершении без задачи."""
         result = complete_task(sample_agent, "Резюме")
-        
+
+        assert result is False
+
+
+class TestTaskReset:
+    """Тесты сброса задач."""
+
+    def test_reset_in_progress_task(self, temp_db):
+        """Проверяет сброс задачи из in_progress в pending."""
+        agent = register_agent("token", "claude", "agent", "developer")
+        create_task("Тестовая задача")
+
+        # Захватываем задачу
+        task = claim_next_task(agent)
+        assert task.status == TaskStatus.IN_PROGRESS
+
+        # Сбрасываем
+        result = reset_task(task.task_id)
+        assert result is True
+
+        # Проверяем задачу
+        updated = get_task(task.task_id)
+        assert updated.status == TaskStatus.PENDING
+        assert updated.assigned_to is None
+        assert updated.target_name is None
+        assert updated.started_at is None
+        assert updated.summary is None
+
+        # Проверяем агента — должен быть idle
+        agent = get_agent_by_session("token")
+        assert agent.status == AgentStatus.IDLE
+        assert agent.current_task_id is None
+
+    def test_reset_done_task(self, temp_db):
+        """Проверяет сброс завершённой задачи."""
+        agent = register_agent("token", "claude", "agent", "developer")
+        create_task("Задача")
+
+        claim_next_task(agent)
+        agent = get_agent_by_session("token")
+        complete_task(agent, "Готово")
+
+        task = get_task(1)
+        assert task.status == TaskStatus.DONE
+
+        result = reset_task(task.task_id)
+        assert result is True
+
+        updated = get_task(task.task_id)
+        assert updated.status == TaskStatus.PENDING
+        assert updated.summary is None
+
+    def test_reset_releases_locks(self, temp_db):
+        """Проверяет снятие блокировок при сбросе."""
+        agent = register_agent("token", "claude", "agent", "developer")
+        task = create_task("Задача")
+
+        claim_next_task(agent)
+        try_lock_file(agent.agent_id, task.task_id, "file1.py")
+        assert get_file_lock("file1.py") is not None
+
+        reset_task(task.task_id)
+        assert get_file_lock("file1.py") is None
+
+    def test_reset_pending_is_noop(self, temp_db):
+        """Проверяет что сброс pending задачи — noop."""
+        create_task("Задача")
+        result = reset_task(1)
+        assert result is True
+
+    def test_reset_nonexistent_task(self, temp_db):
+        """Проверяет сброс несуществующей задачи."""
+        result = reset_task(999)
         assert result is False

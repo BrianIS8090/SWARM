@@ -12,7 +12,6 @@ import typer
 from rich.console import Console
 
 from ..db import (
-    get_agent_by_name,
     get_agent_lock,
     get_all_agents,
     get_all_locks,
@@ -26,32 +25,9 @@ from ..db import (
 )
 from ..models import AgentStatus, EventType
 from ..utils import check_db as _check_db
+from .common import _check_agent
 
 console = Console()
-
-
-def _check_agent(agent_name: str | None = None):
-    """
-    Проверяет регистрацию агента.
-    
-    Args:
-        agent_name: Имя агента (если указано, ищет по имени)
-    """
-    _check_db()
-    
-    if agent_name:
-        agent = get_agent_by_name(agent_name)
-    else:
-        agent = get_current_agent()
-    
-    if agent is None:
-        if agent_name:
-            console.print(f"[red]✗ Агент '{agent_name}' не найден.[/red]")
-        else:
-            console.print("[red]✗ Агент не зарегистрирован. Выполните 'swarm join' сначала.[/red]")
-            console.print("[dim]Подсказка: используйте --agent <имя> для указания агента явно[/dim]")
-        raise typer.Exit(1)
-    return agent
 
 
 def lock_command(
@@ -125,6 +101,9 @@ def lock_command(
 
         elapsed = time.time() - start_time
         if elapsed >= timeout:
+            # Восстанавливаем статус агента, чтобы он не застрял в WAITING
+            if waiting_logged:
+                update_agent_status(agent.agent_id, AgentStatus.WORKING, task_id)
             console.print(f"[red]✗ Таймаут ожидания: {file_path}[/red]")
             log_event(
                 event=EventType.ERROR,

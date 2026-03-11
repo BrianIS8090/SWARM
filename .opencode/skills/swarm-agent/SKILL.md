@@ -99,6 +99,6 @@ swarm done --summary "Добавлен UserController с CRUD, файлы: user.
 - Не спрашивай "что дальше?" — просто жди
 - Не редактируй файлы без блокировки
 - Не используй `swarm unlock --force`
-- Не используй `swarm task add`, `swarm task assign`, `swarm task close`
+- Не используй `swarm task add`, `swarm task assign`, `swarm task close`, `swarm task reset`
 - Не переназначай задачи, не меняй очередь и не выполняй функции оркестратора
 - Не модифицируй swarm.db напрямую

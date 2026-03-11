@@ -13,6 +13,7 @@ import os
 import platform
 import re
 import sqlite3
+import subprocess
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -135,37 +136,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_launch_agents_session_name ON launch_sessi
 """
 
 
-TERMINAL_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS launch_sessions (
-    session_id              TEXT PRIMARY KEY,
-    created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    working_directory       TEXT NOT NULL,
-    approval_mode           TEXT NOT NULL,
-    layout_mode             TEXT NOT NULL,
-    requested_agent_count   INTEGER NOT NULL,
-    status                  TEXT NOT NULL,
-    created_by              TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS launch_session_agents (
-    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id           TEXT NOT NULL REFERENCES launch_sessions(session_id),
-    cli_type             TEXT NOT NULL,
-    agent_name           TEXT NOT NULL,
-    agent_role           TEXT NOT NULL,
-    window_index         INTEGER,
-    pane_index           INTEGER,
-    launcher_profile     TEXT NOT NULL,
-    bootstrap_prompt     TEXT NOT NULL,
-    registration_status  TEXT NOT NULL DEFAULT 'planned',
-    registered_agent_id  INTEGER REFERENCES agents(agent_id),
-    terminal_pid         INTEGER
-);
-
-CREATE INDEX IF NOT EXISTS idx_launch_sessions_status ON launch_sessions(status);
-CREATE INDEX IF NOT EXISTS idx_launch_agents_session ON launch_session_agents(session_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_launch_agents_session_name ON launch_session_agents(session_id, agent_name);
-"""
 
 
 def find_db_path(start_dir: Path | None = None) -> Path | None:
@@ -217,9 +187,13 @@ def init_database(target_dir: Path | None = None) -> Path:
 
 
 def ensure_terminal_schema() -> None:
-    """Гарантирует наличие terminal-таблиц в существующей БД."""
+    """Гарантирует наличие terminal-таблиц в существующей БД.
+
+    Все таблицы (включая terminal) определены в SCHEMA_SQL с IF NOT EXISTS,
+    поэтому повторное выполнение безопасно и не затрагивает существующие данные.
+    """
     with get_connection() as conn:
-        conn.executescript(TERMINAL_SCHEMA_SQL)
+        conn.executescript(SCHEMA_SQL)
 
 
 def validate_agent_name(name: str) -> None:
@@ -310,9 +284,27 @@ def update_agent_status(agent_id: int, status: AgentStatus, task_id: int | None 
 
 
 def is_process_alive(pid: int | None) -> bool:
-    """Проверяет, жив ли процесс с указанным PID."""
+    """Проверяет, жив ли процесс с указанным PID.
+
+    На Windows использует tasklist для надёжной проверки,
+    т.к. os.kill(pid, 0) не различает живой процесс и переиспользованный PID.
+    """
     if pid is None:
         return False
+    if platform.system() == "Windows":
+        try:
+            # Не используем text=True — на Windows вывод может быть в cp866,
+            # что вызывает UnicodeDecodeError
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True,
+                timeout=5,
+            )
+            # Проверяем наличие PID в выводе (байтовая строка)
+            return str(pid).encode() in result.stdout
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # Фоллбэк на os.kill если tasklist недоступен
+            pass
     try:
         os.kill(pid, 0)
         return True
@@ -321,45 +313,61 @@ def is_process_alive(pid: int | None) -> bool:
 
 
 def cleanup_dead_agents(timeout_minutes: int = 30, check_pid: bool = True, force_all: bool = False) -> int:
-    """Удаляет неактивных агентов. M-1: освобождает задачи/блокировки. m-4: UTC."""
+    """Удаляет неактивных агентов. M-1: освобождает задачи/блокировки. m-4: UTC.
+
+    КРИТ-1: при force_all=True освобождает задачи и блокировки перед удалением.
+    ВАЖ-6: все операции обёрнуты в BEGIN IMMEDIATE для атомарности.
+    """
     with get_connection() as conn:
-        if force_all:
-            cursor = conn.execute("DELETE FROM agents")
-            return cursor.rowcount
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if force_all:
+                # КРИТ-1: освобождаем задачи и блокировки перед удалением всех агентов
+                conn.execute("UPDATE tasks SET status = 'failed', assigned_to = NULL WHERE status = 'in_progress'")
+                conn.execute("DELETE FROM file_locks")
+                cursor = conn.execute("DELETE FROM agents")
+                conn.execute("COMMIT")
+                return cursor.rowcount
 
-        now = datetime.now(UTC).replace(tzinfo=None)
-        heartbeat_deadline = now - timedelta(minutes=timeout_minutes)
+            now = datetime.now(UTC).replace(tzinfo=None)
+            heartbeat_deadline = now - timedelta(minutes=timeout_minutes)
 
-        rows = conn.execute("SELECT agent_id, last_heartbeat, pid FROM agents").fetchall()
-        removable_agent_ids = []
+            rows = conn.execute("SELECT agent_id, last_heartbeat, pid FROM agents").fetchall()
+            removable_agent_ids = []
 
-        for row in rows:
-            agent_id = row["agent_id"]
-            last_heartbeat = row["last_heartbeat"]
-            pid = row["pid"]
-            heartbeat_dt = datetime.fromisoformat(last_heartbeat) if isinstance(last_heartbeat, str) else last_heartbeat
-            heartbeat_stale = heartbeat_dt < heartbeat_deadline
-            pid_alive = is_process_alive(pid) if check_pid and pid is not None else None
+            for row in rows:
+                agent_id = row["agent_id"]
+                last_heartbeat = row["last_heartbeat"]
+                pid = row["pid"]
+                heartbeat_dt = datetime.fromisoformat(last_heartbeat) if isinstance(last_heartbeat, str) else last_heartbeat
+                heartbeat_stale = heartbeat_dt < heartbeat_deadline
+                pid_alive = is_process_alive(pid) if check_pid and pid is not None else None
 
-            if pid_alive is False:
-                removable_agent_ids.append(agent_id)
-                continue
-            if heartbeat_stale and (not check_pid or pid is None):
-                removable_agent_ids.append(agent_id)
+                if pid_alive is False:
+                    removable_agent_ids.append(agent_id)
+                    continue
+                if heartbeat_stale and (not check_pid or pid is None):
+                    removable_agent_ids.append(agent_id)
 
-        for agent_id in removable_agent_ids:
-            conn.execute(
-                "UPDATE tasks SET status = 'failed', assigned_to = NULL WHERE assigned_to = ? AND status = 'in_progress'",
-                (agent_id,),
-            )
-            conn.execute("DELETE FROM file_locks WHERE locked_by = ?", (agent_id,))
-            conn.execute(
-                "INSERT INTO task_log (task_id, agent_id, event, message) VALUES (?, ?, ?, ?)",
-                (None, agent_id, EventType.AGENT_CLEANUP.value, f"Агент #{agent_id} удалён (неактивен)"),
-            )
-            conn.execute("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
+            for agent_id in removable_agent_ids:
+                conn.execute(
+                    "UPDATE tasks SET status = 'failed', assigned_to = NULL WHERE assigned_to = ? AND status = 'in_progress'",
+                    (agent_id,),
+                )
+                conn.execute("DELETE FROM file_locks WHERE locked_by = ?", (agent_id,))
+                conn.execute(
+                    "INSERT INTO task_log (task_id, agent_id, event, message) VALUES (?, ?, ?, ?)",
+                    (None, agent_id, EventType.AGENT_CLEANUP.value, f"Агент #{agent_id} удалён (неактивен)"),
+                )
+                conn.execute("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
 
-        return len(removable_agent_ids)
+            conn.execute("COMMIT")
+            return len(removable_agent_ids)
+
+        except Exception:
+            with contextlib.suppress(Exception):
+                conn.execute("ROLLBACK")
+            raise
 
 
 # ============================================================
@@ -390,18 +398,35 @@ def create_task(
     target_role: str | None = None,
     depends_on: int | None = None,
 ) -> Task:
-    """Создаёт новую задачу. m-10: проверка цикличных зависимостей."""
-    with get_connection() as conn:
-        if depends_on is not None and _has_dependency_cycle(conn, depends_on):
-            raise ValueError(f"Обнаружен цикл в зависимостях: задача {depends_on} участвует в циклической цепочке")
+    """Создаёт новую задачу. m-10: проверка цикличных зависимостей.
 
-        cursor = conn.execute(
-            "INSERT INTO tasks (description, priority, target_cli, target_name, target_role, depends_on) VALUES (?, ?, ?, ?, ?, ?)",
-            (description, priority, target_cli, target_name, target_role, depends_on),
-        )
-        task_id = cursor.lastrowid
-        row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-        return Task.from_row(row)
+    КРИТ-4: BEGIN IMMEDIATE для атомарности проверки зависимостей и вставки.
+    """
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if depends_on is not None and _has_dependency_cycle(conn, depends_on):
+                conn.execute("ROLLBACK")
+                raise ValueError(f"Обнаружен цикл в зависимостях: задача {depends_on} участвует в циклической цепочке")
+
+            cursor = conn.execute(
+                "INSERT INTO tasks (description, priority, target_cli, target_name, target_role, depends_on) VALUES (?, ?, ?, ?, ?, ?)",
+                (description, priority, target_cli, target_name, target_role, depends_on),
+            )
+            task_id = cursor.lastrowid
+
+            conn.execute("COMMIT")
+
+            row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+            return Task.from_row(row)
+
+        except ValueError:
+            # ValueError от проверки цикла — ROLLBACK уже вызван выше
+            raise
+        except Exception:
+            with contextlib.suppress(Exception):
+                conn.execute("ROLLBACK")
+            raise
 
 
 def get_task(task_id: int) -> Task | None:
@@ -543,6 +568,50 @@ def complete_task(agent: Agent, summary: str) -> bool:
             raise
 
 
+def reset_task(task_id: int) -> bool:
+    """Сбрасывает задачу в статус pending: снимает привязку к агенту и освобождает блокировки."""
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            task_row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+            if task_row is None:
+                conn.execute("ROLLBACK")
+                return False
+
+            task = Task.from_row(task_row)
+            if task.status == TaskStatus.PENDING:
+                conn.execute("ROLLBACK")
+                return True
+
+            # Освобождаем агента, если задача была назначена
+            if task.assigned_to:
+                conn.execute(
+                    "UPDATE agents SET status = 'idle', current_task_id = NULL, last_heartbeat = CURRENT_TIMESTAMP WHERE agent_id = ? AND current_task_id = ?",
+                    (task.assigned_to, task_id),
+                )
+
+            # Снимаем блокировки файлов
+            conn.execute("DELETE FROM file_locks WHERE task_id = ?", (task_id,))
+
+            # Сбрасываем задачу
+            conn.execute(
+                "UPDATE tasks SET status = 'pending', assigned_to = NULL, target_name = NULL, summary = NULL, started_at = NULL, completed_at = NULL WHERE task_id = ?",
+                (task_id,),
+            )
+
+            conn.execute(
+                "INSERT INTO task_log (task_id, agent_id, event, message) VALUES (?, ?, ?, ?)",
+                (task_id, task.assigned_to, EventType.TASK_RESET.value, "Задача сброшена в pending"),
+            )
+
+            conn.execute("COMMIT")
+            return True
+
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+
 def force_close_task(task_id: int, reason: str = "Принудительно закрыта Лидером") -> bool:
     """Принудительно завершает задачу (команда для Лидера)."""
     with get_connection() as conn:
@@ -570,9 +639,10 @@ def force_close_task(task_id: int, reason: str = "Принудительно з�
                     (task.assigned_to, task_id),
                 )
 
+            # КРИТ-5: логируем TASK_FORCE_CLOSED (не TASK_DONE) — принудительное закрытие
             conn.execute(
                 "INSERT INTO task_log (task_id, agent_id, event, message) VALUES (?, ?, ?, ?)",
-                (task_id, task.assigned_to, EventType.TASK_DONE.value, reason),
+                (task_id, task.assigned_to, EventType.TASK_FORCE_CLOSED.value, reason),
             )
 
             conn.execute("COMMIT")
@@ -971,7 +1041,8 @@ def save_session_token(token: str, agent_name: str, directory: Path | None = Non
     sessions_dir = target_dir / SESSIONS_DIR
     sessions_dir.mkdir(parents=True, exist_ok=True)
     session_path = sessions_dir / f".swarm_session_{agent_name}"
-    session_path.write_text(token)
+    # ВАЖ-4: явное encoding для корректной работы на Windows (cp1251 по умолчанию)
+    session_path.write_text(token, encoding="utf-8")
     with contextlib.suppress(OSError):
         os.chmod(session_path, 0o600)
 
@@ -991,22 +1062,23 @@ def load_session_token(directory: Path | None = None) -> str | None:
         # Проверяем .swarm/sessions/ (новый путь)
         new_session_path = target_dir / SESSIONS_DIR / SESSION_FILENAME
         if new_session_path.exists():
-            return new_session_path.read_text().strip()
+            # ВАЖ-4: явное encoding для корректной работы на Windows
+            return new_session_path.read_text(encoding="utf-8").strip()
         # Fallback на корень (legacy)
         old_session_path = target_dir / SESSION_FILENAME
         if old_session_path.exists():
-            return old_session_path.read_text().strip()
+            return old_session_path.read_text(encoding="utf-8").strip()
         return None
 
     target_dir = directory or Path.cwd()
     # Проверяем .swarm/sessions/ (новый путь)
     session_path = target_dir / SESSIONS_DIR / f".swarm_session_{agent_name}"
     if session_path.exists():
-        return session_path.read_text().strip()
+        return session_path.read_text(encoding="utf-8").strip()
     # Fallback на корень (legacy)
     legacy_path = target_dir / f".swarm_session_{agent_name}"
     if legacy_path.exists():
-        return legacy_path.read_text().strip()
+        return legacy_path.read_text(encoding="utf-8").strip()
     return None
 
 

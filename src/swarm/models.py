@@ -16,6 +16,7 @@ class AgentStatus(str, Enum):
     WORKING = "working"
     WAITING = "waiting"
     DONE = "done"
+    UNKNOWN = "unknown"
 
 
 class TaskStatus(str, Enum):
@@ -26,6 +27,7 @@ class TaskStatus(str, Enum):
     DONE = "done"
     BLOCKED = "blocked"
     FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 class EventType(str, Enum):
@@ -36,6 +38,7 @@ class EventType(str, Enum):
     TASK_CREATED = "task_created"
     TASK_ASSIGNED = "task_assigned"
     TASK_FORCE_CLOSED = "task_force_closed"
+    TASK_RESET = "task_reset"
     FILE_LOCKED = "file_locked"
     FILE_UNLOCKED = "file_unlocked"
     WAITING_FOR_LOCK = "waiting_for_lock"
@@ -51,6 +54,7 @@ class EventType(str, Enum):
     LAUNCH_AGENT_FAILED = "launch_agent_failed"
     LAUNCH_SESSION_COMPLETED = "launch_session_completed"
     LAUNCH_SESSION_STOPPED = "launch_session_stopped"
+    UNKNOWN = "unknown"
 
 
 class LaunchSessionStatus(str, Enum):
@@ -63,6 +67,7 @@ class LaunchSessionStatus(str, Enum):
     REGISTERED = "registered"
     FAILED = "failed"
     STOPPED = "stopped"
+    UNKNOWN = "unknown"
 
 
 class LaunchRegistrationStatus(str, Enum):
@@ -72,6 +77,19 @@ class LaunchRegistrationStatus(str, Enum):
     LAUNCHED = "launched"
     REGISTERED = "registered"
     FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+def _safe_enum(enum_cls, value):
+    """Безопасное создание enum из значения БД.
+
+    При неизвестном значении возвращает UNKNOWN вместо ValueError.
+    Защищает от ситуаций, когда БД содержит значения из другой версии.
+    """
+    try:
+        return enum_cls(value)
+    except ValueError:
+        return enum_cls.UNKNOWN
 
 
 def _parse_dt(value):
@@ -106,7 +124,7 @@ class Agent:
             cli_type=row["cli_type"],
             name=row["name"],
             role=row["role"],
-            status=AgentStatus(row["status"]),
+            status=_safe_enum(AgentStatus, row["status"]),
             current_task_id=row["current_task_id"],
             registered_at=_parse_dt(row["registered_at"]),
             last_heartbeat=_parse_dt(row["last_heartbeat"]),
@@ -142,7 +160,7 @@ class Task:
             target_cli=row["target_cli"],
             target_name=row["target_name"],
             target_role=row["target_role"],
-            status=TaskStatus(row["status"]),
+            status=_safe_enum(TaskStatus, row["status"]),
             assigned_to=row["assigned_to"],
             depends_on=row["depends_on"],
             summary=row["summary"],
@@ -192,7 +210,7 @@ class TaskLogEntry:
             log_id=row["log_id"],
             task_id=row["task_id"],
             agent_id=row["agent_id"],
-            event=EventType(row["event"]),
+            event=_safe_enum(EventType, row["event"]),
             message=row["message"],
             timestamp=_parse_dt(row["timestamp"]),
         )
@@ -222,7 +240,7 @@ class LaunchSession:
             approval_mode=row["approval_mode"],
             layout_mode=row["layout_mode"],
             requested_agent_count=row["requested_agent_count"],
-            status=LaunchSessionStatus(row["status"]),
+            status=_safe_enum(LaunchSessionStatus, row["status"]),
             created_by=row["created_by"],
         )
 
@@ -258,7 +276,7 @@ class LaunchSessionAgent:
             pane_index=row["pane_index"],
             launcher_profile=row["launcher_profile"],
             bootstrap_prompt=row["bootstrap_prompt"],
-            registration_status=LaunchRegistrationStatus(row["registration_status"]),
+            registration_status=_safe_enum(LaunchRegistrationStatus, row["registration_status"]),
             registered_agent_id=row["registered_agent_id"],
             terminal_pid=row["terminal_pid"],
         )

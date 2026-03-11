@@ -22,45 +22,20 @@ from ..db import (
     claim_next_task,
     cleanup_dead_agents,
     complete_task,
-    get_agent_by_name,
     get_all_agents,
     get_current_agent,
     is_process_alive,
     register_agent,
     save_session_token,
     update_agent_heartbeat,
+    update_agent_status,
 )
 from ..models import AgentStatus
-from ..utils import CLI_TYPES
+from ..utils import CLI_TYPES, VALID_ROLES
 from ..utils import check_db as _check_db
+from .common import _check_agent
 
 console = Console()
-
-
-def _check_agent(agent_name: str | None = None):
-    """
-    Проверяет регистрацию агента.
-    
-    Args:
-        agent_name: Имя агента (если указано, ищет по имени вместо сессии)
-    """
-    _check_db()
-    
-    if agent_name:
-        # Ищем агента по имени напрямую
-        agent = get_agent_by_name(agent_name)
-    else:
-        # Ищем по сессии (переменная окружения или файл)
-        agent = get_current_agent()
-    
-    if agent is None:
-        if agent_name:
-            console.print(f"[red]✗ Агент '{agent_name}' не найден.[/red]")
-        else:
-            console.print("[red]✗ Агент не зарегистрирован. Выполните 'swarm join' сначала.[/red]")
-            console.print("[dim]Подсказка: используйте --agent <имя> для указания агента явно[/dim]")
-        raise typer.Exit(1)
-    return agent
 
 
 def join_command(
@@ -82,10 +57,10 @@ def join_command(
         )
         if not typer.confirm("Зарегистрироваться заново?"):
             raise typer.Exit(0)
+        # Помечаем старого агента как завершённого, чтобы не оставлять «призрачные» сессии
+        update_agent_status(existing.agent_id, AgentStatus.DONE)
 
     # Запрашиваем данные интерактивно, если не указаны
-    valid_roles = ["architect", "developer", "tester", "devops"]
-
     if cli_type is None:
         cli_type = Prompt.ask(
             "Тип CLI",
@@ -102,11 +77,11 @@ def join_command(
     if role is None:
         role = Prompt.ask(
             "Роль",
-            choices=valid_roles,
+            choices=VALID_ROLES,
             default="developer",
         )
-    elif role not in valid_roles:
-        console.print(f"[red]✗ Неверная роль. Допустимые: {', '.join(valid_roles)}[/red]")
+    elif role not in VALID_ROLES:
+        console.print(f"[red]✗ Неверная роль. Допустимые: {', '.join(VALID_ROLES)}[/red]")
         raise typer.Exit(1)
 
     # Генерируем session token

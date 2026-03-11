@@ -177,11 +177,13 @@ def launch_command(
 
     # Запускаем только launchable агентов
     if launchable_agents:
+        # Используем явно заданный mode из spec; автоподбор только если mode не задан
+        effective_mode = spec.layout.mode if spec.layout.mode else _auto_layout_mode(len(launchable_agents))
         launch_spec = LaunchSpec(
             version=spec.version,
             working_directory=spec.working_directory,
             approval_mode=spec.approval_mode,
-            layout=LayoutSpec(mode=_auto_layout_mode(len(launchable_agents)), max_panes_per_window=spec.layout.max_panes_per_window),
+            layout=LayoutSpec(mode=effective_mode, max_panes_per_window=spec.layout.max_panes_per_window),
             agents=launchable_agents,
         )
         launch_results = launch_layout(launch_spec, prompt_map, session_id=session_id)
@@ -211,9 +213,12 @@ def launch_command(
 
     started_count = sum(1 for result in launch_results.values() if result.started)
     total_launchable = len(launchable_agents)
-    if total_launchable == 0 or started_count == total_launchable:
+    if total_launchable == 0:
+        # Все агенты исключены — ничего не запущено, оставляем PLANNED
+        pass
+    elif started_count == total_launchable:
         update_launch_session_status(session_id, LaunchSessionStatus.LAUNCHED)
-    elif started_count == 0 and total_launchable > 0:
+    elif started_count == 0:
         update_launch_session_status(session_id, LaunchSessionStatus.FAILED)
     else:
         update_launch_session_status(session_id, LaunchSessionStatus.PARTIALLY_REGISTERED)
@@ -312,8 +317,6 @@ def stop_command(
 
     # Читаем PID-файлы, записанные launcher-скриптами (.swarm/pids/{session}_{agent}.pid)
     pid_dir = Path(session.working_directory) / ".swarm" / "pids"
-    if not pid_dir.exists():
-        pid_dir = Path(session.working_directory) / ".swarm_pids"  # legacy fallback
     killed_count = 0
     if pid_dir.exists():
         for pid_file in pid_dir.glob(f"{session_id}_*.pid"):
@@ -321,7 +324,7 @@ def stop_command(
                 pid = int(pid_file.read_text().strip())
                 subprocess.run(
                     ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    capture_output=True, text=True, check=False,
+                    capture_output=True, check=False,
                 )
                 killed_count += 1
             except (ValueError, OSError):
@@ -334,15 +337,17 @@ def stop_command(
         db_pids = {agent.terminal_pid for agent in launch_agents if agent.terminal_pid}
         for pid in db_pids:
             try:
-                os.kill(pid, 15)
-                killed_count += 1
-            except OSError:
                 if os.name == "nt":
+                    # На Windows используем taskkill /T /F для завершения дерева процессов
                     subprocess.run(
                         ["taskkill", "/PID", str(pid), "/T", "/F"],
-                        capture_output=True, text=True, check=False,
+                        capture_output=True, check=False,
                     )
-                    killed_count += 1
+                else:
+                    os.kill(pid, 15)
+                killed_count += 1
+            except OSError:
+                pass
 
     update_launch_session_status(session_id, LaunchSessionStatus.STOPPED)
     log_event(EventType.LAUNCH_SESSION_STOPPED, message=f"Launch session {session_id} остановлена ({killed_count} процессов)")

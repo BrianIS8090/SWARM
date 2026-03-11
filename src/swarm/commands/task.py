@@ -17,6 +17,7 @@ from ..db import (
     get_current_agent,
     get_task,
     log_event,
+    reset_task,
 )
 from ..models import EventType, TaskStatus
 from ..utils import check_db as _check_db
@@ -254,12 +255,8 @@ def close_command(
     success = force_close_task(task_id, reason)
 
     if success:
-        log_event(
-            event=EventType.TASK_FORCE_CLOSED,
-            task_id=task_id,
-            agent_id=task.assigned_to,
-            message=reason,
-        )
+        # КРИТ-5: log_event уже вызывается внутри force_close_task (TASK_FORCE_CLOSED),
+        # повторный вызов здесь убран для предотвращения двойного логирования
         console.print(f"[green]✓ Задача #{task_id} принудительно закрыта[/green]")
         console.print(f"  Причина: {reason}")
 
@@ -267,6 +264,47 @@ def close_command(
             console.print(f"  Агент #{task.assigned_to} освобождён")
     else:
         console.print(f"[red]✗ Ошибка закрытия задачи #{task_id}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command(name="reset", add_help_option=False)
+def reset_command(
+    task_id: int = typer.Argument(..., help="ID задачи для сброса"),
+):
+    """
+    Сбрасывает задачу в статус pending.
+
+    Снимает привязку к агенту (target_name, assigned_to),
+    освобождает блокировки файлов.
+    """
+    _check_db()
+    _ensure_leader_context()
+
+    # Проверяем существование задачи
+    task = get_task(task_id)
+    if task is None:
+        console.print(f"[red]✗ Задача #{task_id} не найдена[/red]")
+        raise typer.Exit(1)
+
+    # Проверяем, не в pending ли уже
+    if task.status == TaskStatus.PENDING and task.assigned_to is None and task.target_name is None:
+        console.print(f"[yellow]Задача #{task_id} уже в статусе pending[/yellow]")
+        return
+
+    # Сбрасываем задачу
+    success = reset_task(task_id)
+
+    if success:
+        # КРИТ-5: log_event уже вызывается внутри reset_task (TASK_RESET),
+        # повторный вызов здесь убран для предотвращения двойного логирования
+        console.print(f"[green]✓ Задача #{task_id} сброшена в pending[/green]")
+
+        if task.assigned_to:
+            console.print(f"  Агент #{task.assigned_to} освобождён")
+        if task.target_name:
+            console.print(f"  Привязка к '{task.target_name}' снята")
+    else:
+        console.print(f"[red]✗ Ошибка сброса задачи #{task_id}[/red]")
         raise typer.Exit(1)
 
 

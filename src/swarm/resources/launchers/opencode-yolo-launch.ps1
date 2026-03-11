@@ -11,7 +11,7 @@ $env:OPENCODE_CONFIG_CONTENT = '{"permission":"allow"}'
 
 # Записать PID для swarm terminal stop
 if ($SessionId -and $AgentName) {
-  $pidDir = Join-Path (Get-Location) '.swarm' 'pids'
+  $pidDir = Join-Path (Join-Path (Get-Location) '.swarm') 'pids'
   New-Item -ItemType Directory -Path $pidDir -Force | Out-Null
   $PID | Out-File -FilePath (Join-Path $pidDir "${SessionId}_${AgentName}.pid") -NoNewline -Encoding ascii
 }

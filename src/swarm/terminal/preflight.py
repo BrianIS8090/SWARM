@@ -6,8 +6,12 @@ import shutil
 from pathlib import Path
 
 from ..db import get_active_launch_agent_names, get_all_agents
+from ..models import AgentStatus
 from .launcher_registry import get_launcher_path
 from .spec import LaunchSpec
+
+# Статусы агентов, которые считаются завершёнными (не блокируют перезапуск)
+_INACTIVE_STATUSES = {AgentStatus.DONE, AgentStatus.UNKNOWN}
 
 
 def _find_cli_binary(cli_type: str) -> str | None:
@@ -39,10 +43,14 @@ def run_preflight(spec: LaunchSpec, require_wt: bool = True) -> list[str]:
         issues.append("Не найден Windows Terminal (wt.exe) в PATH")
 
     requested_names = {agent.name for agent in spec.agents}
-    registered_names = {agent.name for agent in get_all_agents()}
+    # Игнорируем агентов с завершёнными статусами (DONE, UNKNOWN) — они не блокируют перезапуск
+    active_registered_names = {
+      agent.name for agent in get_all_agents()
+      if agent.status not in _INACTIVE_STATUSES
+    }
     active_launch_names = get_active_launch_agent_names()
 
-    for name in sorted(requested_names & registered_names):
+    for name in sorted(requested_names & active_registered_names):
         issues.append(f"Имя агента уже занято в SWARM: {name}")
 
     for name in sorted(requested_names & active_launch_names):

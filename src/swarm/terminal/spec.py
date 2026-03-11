@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..db import validate_agent_name
-from ..utils import CLI_TYPES
+from ..utils import CLI_TYPES, VALID_ROLES
 
 SPECS_DIR = Path(".swarm") / "specs"
 
 ALLOWED_LAYOUTS = {"single", "mixed", "multi-window"}
 ALLOWED_APPROVAL_MODES = {"safe", "yolo"}
-ALLOWED_ROLES = {"architect", "developer", "tester", "devops"}
+# Используем общий источник ролей из utils
+ALLOWED_ROLES = set(VALID_ROLES)
 
 
 @dataclass

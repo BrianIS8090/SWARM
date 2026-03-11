@@ -407,6 +407,9 @@ swarm task add --desc "Ревью кода" --priority 3 --name alice
 swarm task list --status pending
 swarm task assign 5 --agent bob     # Назначить задачу #5 агенту bob
 swarm task close 5 --reason "Агент завис"
+
+# Сбросить задачу в pending (снять агента и блокировки)
+swarm task reset <ID>
 ```
 
 ### Управление агентами
@@ -418,7 +421,7 @@ swarm agents
 # Удалить неактивных агентов (мёртвые процессы + >30 мин без heartbeat)
 swarm agents --cleanup
 
-# Удалить ВСЕХ агентов (полная очистка)
+# Удалить ВСЕХ агентов + сбросить задачи + снять блокировки
 swarm agents --cleanup --force
 ```
 
@@ -529,6 +532,7 @@ swarm task add --desc "Тесты" --priority 3 --depends-on 2
 | `swarm terminal launch --spec <path>` | Запустить агентов по launch spec |
 | `swarm terminal launch --spec <path> --dry-run` | Проверить план без фактического запуска |
 | `swarm terminal launch --spec <path> --yes` | Запуск без интерактивного подтверждения |
+| `swarm terminal launch --spec <path> --exclude-cli <cli>` | Исключить свой CLI из автозапуска (выведет команду для ручного запуска) |
 | `swarm terminal status` | Показать активные launch sessions |
 | `swarm terminal reconcile --session <id>` | Сверить зарегистрированных агентов с планом |
 | `swarm terminal stop --session <id>` | Остановить session и завершить процессы |
@@ -710,6 +714,7 @@ swarm init --force
 | Список всех задач | `swarm task list --all` |
 | **Назначить задачу** | `swarm task assign <ID> --agent <имя>` |
 | **Закрыть задачу** | `swarm task close <ID>` |
+| **Сбросить задачу** | `swarm task reset <ID>` |
 | Список агентов | `swarm agents` |
 | Удалить мёртвых | `swarm agents --cleanup` |
 | Удалить всех | `swarm agents --cleanup --force` |
@@ -738,6 +743,7 @@ swarm init --force
 |----------|---------|
 | Запустить агентов | `swarm terminal launch --spec launch.json` |
 | Проверить без запуска | `swarm terminal launch --spec launch.json --dry-run` |
+| Исключить свой CLI | `swarm terminal launch --spec launch.json --exclude-cli claude` |
 | Статус sessions | `swarm terminal status` |
 | Сверить регистрацию | `swarm terminal reconcile --session <id>` |
 | Остановить session | `swarm terminal stop --session <id>` |

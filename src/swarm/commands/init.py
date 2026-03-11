@@ -229,6 +229,14 @@ swarm task close <ID> --reason "Агент завис"
 swarm unlock --force --file <файл>
 ```
 
+Если задачу нужно вернуть в очередь (сбросить в pending):
+
+```bash
+swarm task reset <ID>
+```
+
+Это снимает привязку к агенту, освобождает блокировки файлов и возвращает задачу в pending. Полезно когда агент завис, но задачу не нужно закрывать — другой агент сможет её взять.
+
 Если нужно сверить launch session:
 
 ```bash
@@ -269,6 +277,11 @@ swarm terminal stop --session <session_id>
 swarm agents --cleanup --force
 ```
 
+Эта команда:
+- Удаляет всех агентов из БД
+- Сбрасывает незавершённые задачи (`in_progress` → `failed`)
+- Снимает все файловые блокировки
+
 Зачем: старые агенты отработали свои задачи. Оркестратор не может общаться с запущенными окнами. Новые агенты начнут с чистого контекста.
 
 3. **Создай новые задачи** (fix-задачи, дополнительные задачи от пользователя):
@@ -278,9 +291,9 @@ swarm task add --desc "Исправить баг в API" --priority 1 --role dev
 swarm task add --desc "Добавить тесты" --priority 2 --role tester
 ```
 
-4. **Создай новый launch spec** с новыми именами агентов (не повторяй старые имена):
+4. **Создай новый launch spec** (можно переиспользовать имена после cleanup):
 
-Например, если в итерации 1 были `dev-1`, `test-1`, в итерации 2 используй `dev-2`, `test-2`.
+После `--cleanup --force` старые записи удалены — имена свободны. Для наглядности рекомендуется использовать суффикс итерации (`dev-1` → `dev-2`), но это не обязательно.
 
 5. **Запусти новых агентов:**
 
@@ -295,7 +308,7 @@ swarm terminal launch --spec .swarm/specs/launch-spec-iter2.json --exclude-cli <
 ## Правила по именам и ролям
 
 - Имена и роли из фазы 1 — финальные. Не меняй их после подтверждения.
-- Не запускай агента с именем, которое уже занято (`swarm agents` покажет занятые).
+- Не запускай агента с именем, которое уже занято активным агентом (`swarm agents` покажет занятые). Завершённые агенты (статус `done`) не блокируют повторное использование имени.
 - При частичном запуске пересчитай план задач под фактический состав команды.
 
 ## Справочник команд оркестратора
@@ -308,8 +321,9 @@ swarm terminal launch --spec .swarm/specs/launch-spec-iter2.json --exclude-cli <
 | `swarm task list --all` | Все задачи включая завершённые |
 | `swarm task assign ID --agent имя` | Назначить задачу конкретному агенту |
 | `swarm task close ID --reason "..."` | Принудительно закрыть задачу |
+| `swarm task reset ID` | Сбросить задачу в pending (снять агента и блокировки) |
 | `swarm agents` | Список зарегистрированных агентов |
-| `swarm agents --cleanup` | Удалить неактивных агентов |
+| `swarm agents --cleanup` | Удалить неактивных агентов (освобождает задачи и блокировки) |
 | `swarm start --all` | Дать команду на старт |
 | `swarm logs` | Журнал событий |
 | `swarm terminal launch --spec path.json --exclude-cli <тип>` | Запустить агентов, исключив свой CLI |
@@ -432,7 +446,7 @@ swarm done --summary "Добавлен UserController с CRUD, файлы: user.
 - Не спрашивай "что дальше?" — просто жди
 - Не редактируй файлы без блокировки
 - Не используй `swarm unlock --force`
-- Не используй `swarm task add`, `swarm task assign`, `swarm task close`
+- Не используй `swarm task add`, `swarm task assign`, `swarm task close`, `swarm task reset`
 - Не переназначай задачи, не меняй очередь и не выполняй функции оркестратора
 - Не модифицируй swarm.db напрямую
 '''
@@ -547,6 +561,7 @@ def init_command(
     cmd_table.add_row("swarm task list", "Показать активные задачи (pending/in_progress)")
     cmd_table.add_row("swarm task list --all", "Показать все задачи включая завершённые")
     cmd_table.add_row("swarm task close ID", "Принудительно закрыть задачу")
+    cmd_table.add_row("swarm task reset ID", "Сбросить задачу в pending (снять агента и блокировки)")
     cmd_table.add_row("", "")
     cmd_table.add_row("swarm agents", "Список зарегистрированных агентов")
     cmd_table.add_row("swarm agents --cleanup", "Удалить неактивных агентов (мёртвый PID)")
