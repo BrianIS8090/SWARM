@@ -32,6 +32,8 @@ from ..db import (
 from ..models import Agent, AgentStatus, EventType, FileLock, Task, TaskLogEntry, TaskStatus
 from ..utils import get_version
 
+from rich.markup import escape as _esc
+
 # ── Иконки статусов ──────────────────────────────────────────────
 
 AGENT_STATUS_ICONS = {
@@ -206,7 +208,7 @@ class OverviewTasksPanel(Static):
         f"[cyan]#{t.task_id}[/cyan]",
         str(t.priority),
         f"[{color}]{t.status.value}[/{color}]",
-        desc,
+        _esc(desc),
       )
     if cursor_row < table.row_count:
       table.move_cursor(row=cursor_row)
@@ -271,7 +273,7 @@ class OverviewActivityPanel(Static):
         msg = msg[:27] + "..."
       lines.append(
         f"[dim]{time_str}[/dim] [{color}]{icon}[/{color}] {task_str} "
-        f"[cyan]{agent_name:8}[/cyan] {msg}"
+        f"[cyan]{agent_name:8}[/cyan] {_esc(msg)}"
       )
     log = self.query_one("#ov-activity-log", Static)
     log.update("\n".join(lines) if lines else "[dim]Нет событий[/dim]")
@@ -570,7 +572,7 @@ class SwarmTUI(App):
         f"[cyan]{assigned}[/cyan]",
         f"[green]{working}[/green]",
         depends,
-        t.description,
+        _esc(t.description),
         key=str(t.task_id),
       )
 
@@ -610,7 +612,7 @@ class SwarmTUI(App):
         f"[green]{working}[/green]",
         depends,
         f"[dim]{created}[/dim]",
-        t.description,
+        _esc(t.description),
         key=str(t.task_id),
       )
 
@@ -668,7 +670,7 @@ class SwarmTUI(App):
 
       lines.append(
         f"[dim]{time_str}[/dim]  [{color}]{icon}[/{color}]  {task_str}  "
-        f"[cyan]{agent_name:10}[/cyan]  {msg}"
+        f"[cyan]{agent_name:10}[/cyan]  {_esc(msg)}"
       )
 
     log = self.query_one("#activity-log", Static)
@@ -715,7 +717,7 @@ class SwarmTUI(App):
 
     return (
       f"[bold]═══ Задача #{task.task_id} ═══[/bold]\n"
-      f"[bold]Описание:[/bold] {task.description}\n"
+      f"[bold]Описание:[/bold] {_esc(task.description)}\n"
       f"P{task.priority} [{color}]{icon} {task.status.value}[/{color}]  │  "
       f"Роль: {task.target_role or '—'}  │  "
       f"Назначен: [cyan]{task.target_name or '—'}[/cyan]  │  "
@@ -724,7 +726,7 @@ class SwarmTUI(App):
       f"Создана: [dim]{_fmt_dt(task.created_at)}[/dim]  │  "
       f"Начата: [dim]{_fmt_dt(task.started_at)}[/dim]  │  "
       f"Завершена: [dim]{_fmt_dt(task.completed_at)}[/dim]\n"
-      f"[bold]Summary:[/bold] {summary}"
+      f"[bold]Summary:[/bold] {_esc(summary)}"
     )
 
   # ── Обработчики событий ──────────────────────────────────────
