@@ -30,7 +30,7 @@ from ..db import (
   is_process_alive,
 )
 from ..models import Agent, AgentStatus, EventType, FileLock, Task, TaskLogEntry, TaskStatus
-from ..utils import get_version
+from ..utils import create_console, get_version
 
 # ── Иконки статусов ──────────────────────────────────────────────
 
@@ -786,8 +786,7 @@ class SwarmTUI(App):
 def run_tui():
   """Запускает TUI-монитор."""
   if find_db_path() is None:
-    from rich.console import Console
-    Console().print("[red]✗ SWARM не инициализирован. Выполните 'swarm init' сначала.[/red]")
+    create_console().print("[red]✗ SWARM не инициализирован. Выполните 'swarm init' сначала.[/red]")
     return
 
   app = SwarmTUI()

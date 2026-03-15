@@ -4,6 +4,7 @@
 
 import functools
 import json
+import sys
 from pathlib import Path
 
 import typer
@@ -11,7 +12,26 @@ from rich.console import Console
 
 from .db import find_db_path
 
-console = Console()
+def _configure_stdio_for_unicode() -> None:
+  """Переключает stdout/stderr на UTF-8, чтобы Rich не падал на Unicode в Windows-консолях."""
+  for stream_name in ("stdout", "stderr"):
+    stream = getattr(sys, stream_name, None)
+    if stream is None:
+      continue
+
+    reconfigure = getattr(stream, "reconfigure", None)
+    encoding = getattr(stream, "encoding", None)
+    if callable(reconfigure) and encoding and encoding.lower() != "utf-8":
+      reconfigure(encoding="utf-8")
+
+
+def create_console() -> Console:
+  """Создаёт Rich Console после безопасной настройки кодировки потоков."""
+  _configure_stdio_for_unicode()
+  return Console()
+
+
+console = create_console()
 
 # Типы CLI-агентов (единственный источник правды)
 CLI_TYPES = ["claude", "codex", "gemini", "opencode", "qwen"]

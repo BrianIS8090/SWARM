@@ -3,6 +3,7 @@
 
 Точка входа для всех команд:
 - swarm init — инициализация среды
+- swarm path — настройка PATH для CLI
 - swarm task — управление задачами
 - swarm join — регистрация агента
 - swarm agents — список агентов
@@ -18,10 +19,9 @@
 """
 
 import typer
-from rich.console import Console
 
-from .commands import agent, init, lock, logs, monitor, start, task, terminal, tui
-from .utils import get_version
+from .commands import agent, init, lock, logs, monitor, path_cmd, start, task, terminal, tui
+from .utils import create_console, get_version
 
 NO_HELP_CONTEXT_SETTINGS = {
     "help_option_names": [],
@@ -38,7 +38,7 @@ app = typer.Typer(
 )
 
 # Консоль для вывода
-console = Console()
+console = create_console()
 
 # Регистрируем подкоманды
 app.command(name="init", help="Инициализирует среду SWARM в текущей директории", add_help_option=False)(
@@ -66,6 +66,7 @@ app.command(name="lock", help="Захватывает блокировки на 
 app.command(name="unlock", help="Снимает блокировку с файла", add_help_option=False)(lock.unlock_command)
 app.command(name="start", help="Сигнализирует агентам о начале работы", add_help_option=False)(start.start_command)
 app.command(name="monitor", help="Запускает live-дашборд мониторинга", add_help_option=False)(monitor.monitor_command)
+app.command(name="path", help="Добавляет пользовательский Python Scripts в PATH", add_help_option=False)(path_cmd.path_command)
 app.command(name="tui", help="Запускает TUI-монитор со скроллингом", add_help_option=False)(tui.run_tui)
 app.command(name="logs", help="Показывает журнал событий", add_help_option=False)(logs.logs_command)
 app.add_typer(
