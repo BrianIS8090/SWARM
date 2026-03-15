@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 
 import typer
-from rich.console import Console
 
 from ..db import (
     get_agent_lock,
@@ -24,9 +23,10 @@ from ..db import (
 )
 from ..models import AgentStatus, EventType
 from ..utils import check_db as _check_db
+from ..utils import create_console
 from .common import _check_agent
 
-console = Console()
+console = create_console()
 
 
 def lock_command(

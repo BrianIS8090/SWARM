@@ -7,7 +7,6 @@
 
 
 import typer
-from rich.console import Console
 
 from ..db import (
     assign_task_to_agent,
@@ -21,6 +20,7 @@ from ..db import (
 )
 from ..models import EventType, TaskStatus
 from ..utils import check_db as _check_db
+from ..utils import create_console
 
 NO_HELP_CONTEXT_SETTINGS = {
     "help_option_names": [],
@@ -32,7 +32,7 @@ app = typer.Typer(
     no_args_is_help=False,
     context_settings=NO_HELP_CONTEXT_SETTINGS,
 )
-console = Console()
+console = create_console()
 
 
 def _ensure_leader_context():

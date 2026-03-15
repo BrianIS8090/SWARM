@@ -8,7 +8,6 @@ import uuid
 from pathlib import Path
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
@@ -32,8 +31,9 @@ from ..terminal.preflight import run_preflight
 from ..terminal.prompt_builder import build_bootstrap_prompt
 from ..terminal.spec import SPECS_DIR, LaunchSpec, LayoutSpec, load_launch_spec, save_launch_spec
 from ..utils import check_db as _check_db
+from ..utils import create_console
 
-console = Console()
+console = create_console()
 
 NO_HELP_CONTEXT_SETTINGS = {
     "help_option_names": [],

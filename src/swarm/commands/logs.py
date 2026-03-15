@@ -5,13 +5,13 @@
 """
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from ..db import get_all_agents, get_recent_events
 from ..utils import check_db as _check_db
+from ..utils import create_console
 
-console = Console()
+console = create_console()
 
 
 def logs_command(
