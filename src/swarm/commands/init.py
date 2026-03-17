@@ -10,14 +10,13 @@
 from pathlib import Path
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from ..db import DB_FILENAME, init_database
-from ..utils import CLI_TYPES, get_version
+from ..utils import CLI_TYPES, create_console, get_version
 
-console = Console()
+console = create_console()
 
 
 def get_orchestrator_skill_template() -> str:

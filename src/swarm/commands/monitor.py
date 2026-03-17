@@ -12,7 +12,6 @@ import time
 from datetime import UTC, datetime
 
 import typer
-from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
@@ -27,8 +26,9 @@ from ..db import (
 )
 from ..models import AgentStatus, TaskStatus
 from ..utils import check_db as _check_db
+from ..utils import create_console
 
-console = Console()
+console = create_console()
 
 
 def create_agents_panel() -> Panel:

@@ -6,13 +6,13 @@
 
 
 import typer
-from rich.console import Console
 
 from ..db import get_all_agents, log_event
 from ..models import EventType
 from ..utils import check_db as _check_db
+from ..utils import create_console
 
-console = Console()
+console = create_console()
 
 
 def start_command(

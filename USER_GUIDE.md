@@ -87,6 +87,18 @@ cd ваш-проект
 swarm init
 ```
 
+Если после `pip install -e .` PowerShell не находит команду `swarm`, запустите:
+
+```bash
+python -m swarm.cli path
+```
+
+Эта команда добавит пользовательский каталог Python `Scripts` в `PATH` Windows. Для проверки без изменений используйте:
+
+```bash
+python -m swarm.cli path --check
+```
+
 #### Шаг 2. Запуск оркестратора
 
 Откройте терминал с LLM и скажите:

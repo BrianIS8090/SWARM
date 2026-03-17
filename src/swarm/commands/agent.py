@@ -13,7 +13,6 @@ import uuid
 from datetime import UTC, datetime
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
@@ -31,11 +30,11 @@ from ..db import (
     update_agent_status,
 )
 from ..models import AgentStatus
-from ..utils import CLI_TYPES, VALID_ROLES
+from ..utils import CLI_TYPES, VALID_ROLES, create_console
 from ..utils import check_db as _check_db
 from .common import _check_agent
 
-console = Console()
+console = create_console()
 
 
 def join_command(

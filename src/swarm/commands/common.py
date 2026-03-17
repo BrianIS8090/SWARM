@@ -5,12 +5,12 @@
 """
 
 import typer
-from rich.console import Console
 
 from ..db import get_agent_by_name, get_current_agent
 from ..utils import check_db as _check_db
+from ..utils import create_console
 
-console = Console()
+console = create_console()
 
 
 def _check_agent(agent_name: str | None = None):
