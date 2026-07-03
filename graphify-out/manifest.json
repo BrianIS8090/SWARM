@@ -1,0 +1,202 @@
+{
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\cli.py": {
+    "mtime": 1773738738.6521666,
+    "hash": "209c1694a82c4434e2a42a4a57adc962"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\db.py": {
+    "mtime": 1773207743.684175,
+    "hash": "1e06025609f5ea666fa9a458e8c91687"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\models.py": {
+    "mtime": 1773207045.3184865,
+    "hash": "d934571c0a839e5350d6ebcd5ff946e8"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\utils.py": {
+    "mtime": 1773738738.6573503,
+    "hash": "4ab2e981b6e7561df2e4110a6dfd5e5b"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\__init__.py": {
+    "mtime": 1773208584.6490943,
+    "hash": "4e8b3ed980ba4d54f934092afd132b10"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\agent.py": {
+    "mtime": 1773738738.6532564,
+    "hash": "b208a55fa1d02ba5bcd2a5be61b7097c"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\common.py": {
+    "mtime": 1773738738.6532564,
+    "hash": "0855228e1a084519c29bac3f6abf849f"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\init.py": {
+    "mtime": 1773738738.6532564,
+    "hash": "8ccd70cfd92637517f44b0c8b061e934"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\lock.py": {
+    "mtime": 1773738738.654256,
+    "hash": "2dc423b8bfd9fcf519e4a573f1beb4eb"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\logs.py": {
+    "mtime": 1773738738.654256,
+    "hash": "5879e0d3b56753314c4f48e029a1da5e"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\monitor.py": {
+    "mtime": 1773738738.654256,
+    "hash": "9d41588b2161753808d53760aafef374"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\path_cmd.py": {
+    "mtime": 1773738738.654256,
+    "hash": "9bc3e8eb3f3d7131ab43b310bdaae57f"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\start.py": {
+    "mtime": 1773738738.65576,
+    "hash": "4eadbf547ec1fbaa890eb24844932c10"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\task.py": {
+    "mtime": 1773738738.65576,
+    "hash": "5688a833f32731b648ddf52fc861ac45"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\terminal.py": {
+    "mtime": 1773738738.65576,
+    "hash": "84b86b3238d3ebc940cc4262269b75aa"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\tui.py": {
+    "mtime": 1773738738.65576,
+    "hash": "aa0e44ebe6cc637504f40da4ccae0a9d"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\commands\\__init__.py": {
+    "mtime": 1773738738.6521666,
+    "hash": "8f08bfbe88f711959625428270f67745"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\claude-safe-launch.ps1": {
+    "mtime": 1773204230.8881469,
+    "hash": "6a31ede217fc278803e237f6338e6ee6"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\claude-yolo-launch.ps1": {
+    "mtime": 1773204253.140582,
+    "hash": "21df61edbe5d6fe2bb43c522c8a9de8d"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\codex-safe-launch.ps1": {
+    "mtime": 1773204253.7226372,
+    "hash": "0f800459234bb532fbe5a2ee02d84dd1"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\codex-yolo-launch.ps1": {
+    "mtime": 1773204255.0551634,
+    "hash": "e233c4a97273668408cd97a9c9084a56"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\gemini-safe-launch.ps1": {
+    "mtime": 1773204255.9461122,
+    "hash": "2e5dca7a97fc140b7173e1da085f98df"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\gemini-yolo-launch.ps1": {
+    "mtime": 1773204256.8404174,
+    "hash": "f6a5395f0cae64077a21e4eaad52f102"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\opencode-safe-launch.ps1": {
+    "mtime": 1773204258.1718307,
+    "hash": "df324092356a95a0eb9a160d2e63ebbf"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\opencode-yolo-launch.ps1": {
+    "mtime": 1773204259.056478,
+    "hash": "c43b71c8c225a1e74feaef5847cca367"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\qwen-safe-launch.ps1": {
+    "mtime": 1773204260.386739,
+    "hash": "683b6b49e868d4ca89d75e0a516717f6"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\resources\\launchers\\qwen-yolo-launch.ps1": {
+    "mtime": 1773204261.0646539,
+    "hash": "683b6b49e868d4ca89d75e0a516717f6"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\terminal\\launcher_registry.py": {
+    "mtime": 1773119725.6941044,
+    "hash": "087b532cd85d585fd9ac4a74b77a1e33"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\terminal\\layouts.py": {
+    "mtime": 1773144201.8299837,
+    "hash": "a085cfe857ac3b772b3256bbb78769e9"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\terminal\\preflight.py": {
+    "mtime": 1773207729.492735,
+    "hash": "fd83f37c25e2e29900ade34680f2d46e"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\terminal\\prompt_builder.py": {
+    "mtime": 1773123498.068754,
+    "hash": "7c1dcbf0c8d1690cd9d9e7242710e2b2"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\terminal\\spec.py": {
+    "mtime": 1773207708.5334027,
+    "hash": "149206d7f56bb5865c3c2ede8916c05a"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\src\\swarm\\terminal\\__init__.py": {
+    "mtime": 1773119681.8766842,
+    "hash": "15743eaf0a505c7aa3173aad0efcdb2c"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\conftest.py": {
+    "mtime": 1773207701.3288221,
+    "hash": "cecb8c9f1ea7aab2e51c2d38cfa02358"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_agents.py": {
+    "mtime": 1773132116.3443189,
+    "hash": "098e16f2ad137075f566e27482cb7573"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_cli.py": {
+    "mtime": 1773210404.235574,
+    "hash": "766a7a5db13fee63c53bd90b596ea926"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_common.py": {
+    "mtime": 1773207929.0217574,
+    "hash": "1d37dfd3d74a5e8fd4032aea842f57ac"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_db.py": {
+    "mtime": 1773207868.791953,
+    "hash": "e3cb35c847c4a040a6135fbd891a110b"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_edge_cases.py": {
+    "mtime": 1773210208.896517,
+    "hash": "e0e66da64a5acfc4af5146b9d812b3f8"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_lock.py": {
+    "mtime": 1773207236.6908107,
+    "hash": "c9b9c2ff7534d3592d383f351b4187c5"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_models.py": {
+    "mtime": 1773207120.6095603,
+    "hash": "cabcad0ae2eec8eb415640ee5a295054"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_spec.py": {
+    "mtime": 1773207864.708848,
+    "hash": "573d37271365f78ea03d4f6d744dae89"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_tasks.py": {
+    "mtime": 1773203111.6216002,
+    "hash": "4387551c8863fec78fc46182eac4c5a6"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_terminal_cmd.py": {
+    "mtime": 1773207323.784511,
+    "hash": "7a7f9e695393f4605c5115aeee82e141"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\test_utils.py": {
+    "mtime": 1773207120.6095603,
+    "hash": "f0f9d18147d86186a1c23a876c301843"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\tests\\__init__.py": {
+    "mtime": 1770360861.8542025,
+    "hash": "7975cd6b665f5a912e4b76703144af6e"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\AGENTS.md": {
+    "mtime": 1773810883.057057,
+    "hash": "a81283ffbee6e40d15a0bbd080d6ee8b"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\CLAUDE.md": {
+    "mtime": 1773810883.060562,
+    "hash": "98da7ea99b05e7f630c71535300dffad"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\README.md": {
+    "mtime": 1773738738.6511664,
+    "hash": "1f1a04306b6f8018f9220fbef6d66a03"
+  },
+  "C:\\Users\\Brian\\Downloads\\SWARM\\USER_GUIDE.md": {
+    "mtime": 1773738738.6521666,
+    "hash": "988f87141b70e14856941746c6f17e88"
+  }
+}

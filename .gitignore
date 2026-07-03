@@ -56,3 +56,4 @@ swarm.db-shm
 .DS_Store
 Thumbs.db
 .doc/
+.gitnexus
